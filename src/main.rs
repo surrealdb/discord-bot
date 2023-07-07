@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fs;
 
 use serenity::async_trait;
-use serenity::builder::CreateChannel;
 use serenity::model::channel::Message;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
@@ -25,9 +24,6 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        // println!("{:?}", msg);
-        // println!("{:?}", msg.content);
-
         if msg.content == "!sql" {
             match msg.guild_id {
                 Some(id) => {
@@ -54,7 +50,11 @@ impl EventHandler for Handler {
         } else if let Some(db) = DBCONNS.lock().await.get(msg.channel_id.as_u64()) {
             let result = db.query(&msg.content).await;
             if validate_msg(&msg) {
-                msg.reply(&ctx, format!("{:#?}", result)).await.unwrap();
+                let reply = match surreal_bot::process(true, true, result) {
+                    Ok(r) => r,
+                    Err(e) => e.to_string(),
+                };
+                msg.reply(&ctx, reply).await.unwrap();
             }
         } else {
             return;
@@ -62,9 +62,7 @@ impl EventHandler for Handler {
     }
 }
 
-// static DBCONNS: Mutex<HashMap<u64, Surreal<Db>>> = Mutex::new(HashMap::new());
 static DBCONNS: Lazy<Mutex<HashMap<u64, Surreal<Db>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-
 static DB: Surreal<Db> = Surreal::init();
 
 #[tokio::main]
