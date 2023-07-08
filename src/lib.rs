@@ -1,7 +1,28 @@
+pub mod hander;
+
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use surrealdb::Error;
 use surrealdb::{sql::Value, Response};
+use tokio::time::{Duration, Instant};
+
+use std::collections::HashMap;
+
+use serenity::prelude::*;
+
+use once_cell::sync::Lazy;
+use surrealdb::engine::local::{Db, Mem};
+use surrealdb::Surreal;
+
+pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+pub static DB: Surreal<Db> = Surreal::init();
+pub const DEFAULT_TTL: Duration = Duration::from_secs(20 * 60);
+
+pub struct Conn {
+    db: Surreal<Db>,
+    last_used: Instant,
+    ttl: Duration,
+}
 
 pub fn process(
     pretty: bool,

@@ -12,58 +12,62 @@ use once_cell::sync::Lazy;
 use surrealdb::engine::local::{Db, Mem};
 use surrealdb::Surreal;
 
-fn validate_msg(msg: &Message) -> bool {
-    if msg.author.bot == true {
-        return false;
-    };
-    true
-}
+use surreal_bot::hander::Handler;
+use surreal_bot::{DB, DBCONNS};
 
-struct Handler;
+// fn validate_msg(msg: &Message) -> bool {
+//     if msg.author.bot == true {
+//         return false;
+//     };
+//     true
+// }
 
-#[async_trait]
-impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, msg: Message) {
-        if msg.content == "!sql" {
-            match msg.guild_id {
-                Some(id) => {
-                    let guild = Guild::get(&ctx, id).await.unwrap();
-                    let channel = guild
-                        .create_channel(&ctx, |c| {
-                            c.name(msg.id.to_string()).kind(ChannelType::Text)
-                        })
-                        .await
-                        .unwrap();
-                    let db = Surreal::new::<Mem>(()).await.unwrap();
-                    db.use_ns("test").use_db("test").await.unwrap();
-                    DBCONNS.lock().await.insert(channel.id.as_u64().clone(), db);
+// struct Handler;
 
-                    channel.say(&ctx, "This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!").await.unwrap();
-                }
-                None => {
-                    msg.reply(&ctx, "Direct messages are not currently supported")
-                        .await
-                        .unwrap();
-                    return;
-                }
-            }
-        } else if let Some(db) = DBCONNS.lock().await.get(msg.channel_id.as_u64()) {
-            let result = db.query(&msg.content).await;
-            if validate_msg(&msg) {
-                let reply = match surreal_bot::process(true, true, result) {
-                    Ok(r) => r,
-                    Err(e) => e.to_string(),
-                };
-                msg.reply(&ctx, reply).await.unwrap();
-            }
-        } else {
-            return;
-        }
-    }
-}
+// #[async_trait]
+// impl EventHandler for Handler {
+//     async fn message(&self, ctx: Context, msg: Message) {
+//         if msg.content == "!sql" {
+//             match msg.guild_id {
+//                 Some(id) => {
+//                     let guild = Guild::get(&ctx, id).await.unwrap();
+//                     let channel = guild
+//                         .create_channel(&ctx, |c| {
+//                             c.name(msg.id.to_string()).kind(ChannelType::Text)
+//                         })
+//                         .await
+//                         .unwrap();
+//                     let db = Surreal::new::<Mem>(()).await.unwrap();
+//                     db.use_ns("test").use_db("test").await.unwrap();
+//                     DBCONNS.lock().await.insert(channel.id.as_u64().clone(), db);
 
-static DBCONNS: Lazy<Mutex<HashMap<u64, Surreal<Db>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-static DB: Surreal<Db> = Surreal::init();
+//                     channel.say(&ctx, "This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!").await.unwrap();
+//                     msg.reply(&ctx, format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await.unwrap();
+//                 }
+//                 None => {
+//                     msg.reply(&ctx, "Direct messages are not currently supported")
+//                         .await
+//                         .unwrap();
+//                     return;
+//                 }
+//             }
+//         } else if let Some(db) = DBCONNS.lock().await.get(msg.channel_id.as_u64()) {
+//             let result = db.query(&msg.content).await;
+//             if validate_msg(&msg) {
+//                 let reply = match surreal_bot::process(true, true, result) {
+//                     Ok(r) => r,
+//                     Err(e) => e.to_string(),
+//                 };
+//                 msg.reply(&ctx, reply).await.unwrap();
+//             }
+//         } else {
+//             return;
+//         }
+//     }
+// }
+
+// static DBCONNS: Lazy<Mutex<HashMap<u64, Surreal<Db>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+// static DB: Surreal<Db> = Surreal::init();
 
 #[tokio::main]
 async fn main() -> surrealdb::Result<()> {
