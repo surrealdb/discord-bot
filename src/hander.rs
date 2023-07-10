@@ -1,35 +1,20 @@
 use serenity::async_trait;
 use serenity::model::channel::Message;
-use serenity::model::prelude::command::Command;
+
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use tokio::time::{sleep, sleep_until, Duration, Instant};
-
-use surrealdb::engine::local::Mem;
-use surrealdb::Surreal;
+use tokio::time::Instant;
 
 use crate::commands;
 use crate::process;
-use crate::DB;
-use crate::{DBCONNS, DEFAULT_TTL};
+use crate::DBCONNS;
 
 fn validate_msg(msg: &Message) -> bool {
     if msg.author.bot == true {
         return false;
     };
     true
-}
-
-async fn clean_channel(channel: GuildChannel, ctx: &Context) {
-    let _ = channel
-        .say(
-            &ctx,
-            "This database instance has expired and is no longer functional",
-        )
-        .await;
-
-    DBCONNS.lock().await.remove(channel.id.as_u64());
 }
 
 pub struct Handler;
@@ -57,7 +42,9 @@ impl EventHandler for Handler {
 
         for guild in ready.guilds {
             let commands = GuildId::set_application_commands(&guild.id, &ctx, |commands| {
-                commands.create_application_command(|command| commands::create::register(command))
+                commands
+                    .create_application_command(|command| commands::create::register(command))
+                    .create_application_command(|command| commands::configure::register(command))
             })
             .await;
 
@@ -73,6 +60,7 @@ impl EventHandler for Handler {
 
             let content = match command.data.name.as_str() {
                 "create" => commands::create::run(&command, ctx.clone()).await,
+                "configure" => commands::configure::run(&command, ctx.clone()).await,
                 _ => "Command is curretnly not implemented".to_string(),
             };
 

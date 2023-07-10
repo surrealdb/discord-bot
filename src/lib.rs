@@ -1,6 +1,8 @@
 pub mod commands;
+pub mod config;
 pub mod hander;
 
+use config::Config;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use surrealdb::Error;
@@ -12,7 +14,7 @@ use std::collections::HashMap;
 use serenity::prelude::*;
 
 use once_cell::sync::Lazy;
-use surrealdb::engine::local::{Db, Mem};
+use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));

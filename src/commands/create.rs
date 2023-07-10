@@ -1,20 +1,36 @@
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::{Guild, GuildChannel, Message};
+use serenity::model::prelude::{Guild, GuildChannel};
 use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::time::{sleep_until, Instant};
 
-use crate::{DBCONNS, DEFAULT_TTL};
+use crate::config::Config;
+use crate::{DB, DBCONNS, DEFAULT_TTL};
 
 pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> String {
     match command.guild_id {
         Some(id) => {
+            let result: Result<Option<Config>, surrealdb::Error> =
+                DB.select(("guild_config", id.to_string())).await;
+
+            let config = match result {
+                Ok(response) => {
+                    match response {
+                        Some(c) => {c}
+                        None => return "No config found for this server, please ask an administrator to configure the bot".to_string()
+                    }
+                }
+                Err(e) => return format!("Database error: {}", e),
+            };
+
             let guild = Guild::get(&ctx, id).await.unwrap();
             let channel = guild
                 .create_channel(&ctx, |c| {
-                    c.name(command.id.to_string()).kind(ChannelType::Text)
+                    c.name(command.id.to_string())
+                        .kind(ChannelType::Text)
+                        .category(config.active_channel)
                 })
                 .await
                 .unwrap();
@@ -64,13 +80,6 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
     command
         .name("create")
         .description("Creates a channel with a SurrealDB instance")
-}
-
-fn validate_msg(msg: &Message) -> bool {
-    if msg.author.bot == true {
-        return false;
-    };
-    true
 }
 
 async fn clean_channel(channel: GuildChannel, ctx: &Context) {
