@@ -7,9 +7,13 @@ use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
 use crate::config::Config;
+use crate::utils::interaction_reply;
 use crate::DB;
 
-pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> String {
+pub async fn run(
+    command: &ApplicationCommandInteraction,
+    ctx: Context,
+) -> Result<(), anyhow::Error> {
     println!("\n\n\n\n");
     println!("{:?}", command.data.options);
 
@@ -19,11 +23,11 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
 
     match result {
         Ok(response) => match response {
-            Some(c) => return format!("This server is already configured with: {:?}\n Try using /configUpdate to change the config", c),
+            Some(c) => return interaction_reply(command, ctx.clone(), format!("This server is already configured with: {:?}\n Try using /configUpdate to change the config", c)).await,
 
             None => {}
         },
-        Err(e) => return format!("Database error: {}", e),
+        Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
 
     assert_eq!(command.data.options[0].name, "active");
@@ -61,14 +65,17 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
         .content(config)
         .await;
 
-    match created {
+    let msg = match created {
         Ok(response) => match response {
-            Some(c) => format!("This server is now configured with: {:?}", c),
+            Some(c) => {
+                format!("This server is now configured with: {:?}", c)
+            }
 
             None => "Error adding configuration".to_string(),
         },
-        Err(e) => return format!("Database error: {}", e),
-    }
+        Err(e) => format!("Database error: {}", e),
+    };
+    interaction_reply(command, ctx.clone(), msg).await
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
@@ -81,6 +88,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
                 .name("active")
                 .description("channel category for current database instances")
                 .kind(CommandOptionType::Channel)
+                .channel_types(&[ChannelType::Category])
                 .required(true)
         })
         .create_option(|option| {
@@ -88,6 +96,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
                 .name("archive")
                 .description("channel category for archived database instances")
                 .kind(CommandOptionType::Channel)
+                .channel_types(&[ChannelType::Category])
                 .required(true)
         })
 }

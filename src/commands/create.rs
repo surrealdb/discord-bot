@@ -7,10 +7,16 @@ use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::time::{sleep_until, Instant};
 
+use crate::db_utils::*;
+
 use crate::config::Config;
+use crate::utils::interaction_reply;
 use crate::{DB, DBCONNS, DEFAULT_TTL};
 
-pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> String {
+pub async fn run(
+    command: &ApplicationCommandInteraction,
+    ctx: Context,
+) -> Result<(), anyhow::Error> {
     match command.guild_id {
         Some(id) => {
             let result: Result<Option<Config>, surrealdb::Error> =
@@ -20,10 +26,10 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
                 Ok(response) => {
                     match response {
                         Some(c) => {c}
-                        None => return "No config found for this server, please ask an administrator to configure the bot".to_string()
+                        None => return interaction_reply(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
                     }
                 }
-                Err(e) => return format!("Database error: {}", e),
+                Err(e) => return interaction_reply(command, ctx, format!("Database error: {}", e)).await,
             };
 
             let guild = Guild::get(&ctx, id).await.unwrap();
@@ -41,7 +47,8 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
                 PermissionOverwrite {
                     allow: Permissions::VIEW_CHANNEL
                         .union(Permissions::SEND_MESSAGES)
-                        .union(Permissions::READ_MESSAGE_HISTORY),
+                        .union(Permissions::READ_MESSAGE_HISTORY) // .union(Permissions::MANAGE_CHANNELS)
+                        .union(Permissions::MANAGE_ROLES),
                     deny: Permissions::empty(),
                     kind: serenity::model::prelude::PermissionOverwriteType::Member(UserId(
                         command.application_id.as_u64().clone(),
@@ -79,7 +86,7 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
             );
 
             channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await.unwrap();
-            let res = format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64());
+            let res = interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await;
             tokio::spawn(async move {
                 let mut last_time: Instant = Instant::now();
                 let mut ttl = DEFAULT_TTL.clone();
@@ -104,7 +111,12 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
             return res;
         }
         None => {
-            return "Direct messages are not currently supported".to_string();
+            return interaction_reply(
+                command,
+                ctx,
+                "Direct messages are not currently supported".to_string(),
+            )
+            .await;
         }
     }
 }
@@ -115,7 +127,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         .description("Creates a channel with a SurrealDB instance")
 }
 
-async fn clean_channel(channel: GuildChannel, ctx: &Context) {
+async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
     let _ = channel
         .say(
             &ctx,
@@ -124,4 +136,20 @@ async fn clean_channel(channel: GuildChannel, ctx: &Context) {
         .await;
 
     DBCONNS.lock().await.remove(channel.id.as_u64());
+
+    let result = get_config(channel.guild_id).await;
+
+    let response = match result {
+        Ok(o) => o,
+        Err(_) => return,
+    };
+
+    let config = match response {
+        Some(c) => c,
+        None => return,
+    };
+
+    let _ = channel
+        .edit(ctx, |c| c.category(config.archive_channel))
+        .await;
 }

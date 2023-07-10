@@ -1,6 +1,9 @@
+pub mod channel_info;
 pub mod commands;
 pub mod config;
+pub mod db_utils;
 pub mod hander;
+pub mod utils;
 
 use config::Config;
 use serde::Serialize;
@@ -20,7 +23,9 @@ use surrealdb::Surreal;
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 pub static DB: Surreal<Db> = Surreal::init();
 pub const DEFAULT_TTL: Duration = Duration::from_secs(20 * 60);
+// pub const DEFAULT_TTL: Duration = Duration::from_secs(20);
 
+#[derive(Debug)]
 pub struct Conn {
     db: Surreal<Db>,
     last_used: Instant,

@@ -8,6 +8,7 @@ use tokio::time::Instant;
 
 use crate::commands;
 use crate::process;
+use crate::utils::interaction_reply;
 use crate::DBCONNS;
 
 fn validate_msg(msg: &Message) -> bool {
@@ -41,12 +42,8 @@ impl EventHandler for Handler {
         println!("{} is connected!", ready.user.name);
 
         for guild in ready.guilds {
-            let commands = GuildId::set_application_commands(&guild.id, &ctx, |commands| {
-                commands
-                    .create_application_command(|command| commands::create::register(command))
-                    .create_application_command(|command| commands::configure::register(command))
-            })
-            .await;
+            let commands =
+                GuildId::set_application_commands(&guild.id, &ctx, commands::register_all).await;
 
             if let Err(why) = commands {
                 eprintln!("Failed to register commands: {}", why);
@@ -58,22 +55,32 @@ impl EventHandler for Handler {
         if let Interaction::ApplicationCommand(command) = interaction {
             println!("Received command interaction: {:#?}", command);
 
-            let content = match command.data.name.as_str() {
+            let res = match command.data.name.as_str() {
                 "create" => commands::create::run(&command, ctx.clone()).await,
                 "configure" => commands::configure::run(&command, ctx.clone()).await,
-                _ => "Command is curretnly not implemented".to_string(),
+                "share" => commands::share::run(&command, ctx.clone()).await,
+                _ => {
+                    interaction_reply(
+                        &command,
+                        ctx.clone(),
+                        "Command is curretnly not implemented".to_string(),
+                    )
+                    .await
+                }
             };
 
-            if let Err(why) = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| message.content(content))
-                })
-                .await
-            {
+            if let Err(why) = res {
                 println!("Cannot respond to slash command: {}", why);
             }
+        }
+    }
+
+    async fn guild_create(&self, ctx: Context, guild: Guild) {
+        let commands =
+            GuildId::set_application_commands(&guild.id, &ctx, commands::register_all).await;
+
+        if let Err(why) = commands {
+            eprintln!("Failed to register commands: {}", why);
         }
     }
 }
