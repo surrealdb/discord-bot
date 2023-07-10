@@ -1,5 +1,6 @@
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::{Guild, GuildChannel};
+use serenity::model::prelude::{Guild, GuildChannel, PermissionOverwrite, UserId};
+use serenity::model::Permissions;
 use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use surrealdb::engine::local::Mem;
@@ -26,11 +27,43 @@ pub async fn run(command: &ApplicationCommandInteraction, ctx: Context) -> Strin
             };
 
             let guild = Guild::get(&ctx, id).await.unwrap();
+
+            let everyone = guild.role_by_name("@everyone");
+
+            let perms = vec![
+                PermissionOverwrite {
+                    allow: Permissions::empty(),
+                    deny: Permissions::VIEW_CHANNEL,
+                    kind: serenity::model::prelude::PermissionOverwriteType::Role(
+                        everyone.unwrap().id,
+                    ),
+                },
+                PermissionOverwrite {
+                    allow: Permissions::VIEW_CHANNEL
+                        .union(Permissions::SEND_MESSAGES)
+                        .union(Permissions::READ_MESSAGE_HISTORY),
+                    deny: Permissions::empty(),
+                    kind: serenity::model::prelude::PermissionOverwriteType::Member(UserId(
+                        command.application_id.as_u64().clone(),
+                    )),
+                },
+                PermissionOverwrite {
+                    allow: Permissions::VIEW_CHANNEL
+                        .union(Permissions::SEND_MESSAGES)
+                        .union(Permissions::READ_MESSAGE_HISTORY),
+                    deny: Permissions::empty(),
+                    kind: serenity::model::prelude::PermissionOverwriteType::Member(
+                        command.user.id,
+                    ),
+                },
+            ];
+
             let channel = guild
                 .create_channel(&ctx, |c| {
                     c.name(command.id.to_string())
                         .kind(ChannelType::Text)
                         .category(config.active_channel)
+                        .permissions(perms)
                 })
                 .await
                 .unwrap();
