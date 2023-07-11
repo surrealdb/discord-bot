@@ -1,4 +1,5 @@
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
+use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::{Guild, GuildChannel, PermissionOverwrite, UserId};
 use serenity::model::Permissions;
 use serenity::prelude::Context;
@@ -10,7 +11,7 @@ use tokio::time::{sleep_until, Instant};
 use crate::db_utils::*;
 
 use crate::config::Config;
-use crate::utils::interaction_reply;
+use crate::utils::{interaction_reply, interaction_reply_ephemeral};
 use crate::{DB, DBCONNS, DEFAULT_TTL};
 
 pub async fn run(
@@ -31,6 +32,8 @@ pub async fn run(
                 }
                 Err(e) => return interaction_reply(command, ctx, format!("Database error: {}", e)).await,
             };
+
+            println!("options array length:{:?}", command.data.options.len());
 
             let guild = Guild::get(&ctx, id).await.unwrap();
 
@@ -75,6 +78,40 @@ pub async fn run(
                 .unwrap();
             let db = Surreal::new::<Mem>(()).await.unwrap();
             db.use_ns("test").use_db("test").await.unwrap();
+
+            if command.data.options.len() > 1 {
+                interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                return Ok(());
+            }
+
+            if command.data.options.len() == 1 {
+                let op_option = command.data.options[0].clone();
+                match op_option.kind {
+                    CommandOptionType::String => match op_option.value.unwrap().as_str().unwrap() {
+                        "surreal_deal" => {
+                            println!("before import");
+                            db.import("premade/surreal_deal_mini.surql").await?;
+                            println!("after import");
+                        }
+                        _ => {
+                            interaction_reply_ephemeral(
+                                command,
+                                ctx,
+                                "Cannot find requested dataset",
+                            )
+                            .await?;
+                            return Ok(());
+                        }
+                    },
+                    CommandOptionType::Attachment => {}
+                    _ => {
+                        interaction_reply_ephemeral(command, ctx, "Unsupported option type")
+                            .await?;
+                        return Ok(());
+                    }
+                }
+            }
+
             DBCONNS.lock().await.insert(
                 channel.id.as_u64().clone(),
                 crate::Conn {
@@ -84,11 +121,11 @@ pub async fn run(
                 },
             );
 
-            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await.unwrap();
-            let res = interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await;
+            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await?;
+            interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
             tokio::spawn(async move {
-                let mut last_time: Instant = Instant::now();
-                let mut ttl = DEFAULT_TTL.clone();
+                let mut last_time;
+                let mut ttl;
                 loop {
                     match DBCONNS.lock().await.get(channel.id.as_u64()) {
                         Some(e) => {
@@ -107,7 +144,7 @@ pub async fn run(
                     sleep_until(last_time + ttl).await;
                 }
             });
-            return res;
+            return Ok(());
         }
         None => {
             return interaction_reply(
@@ -124,6 +161,23 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
     command
         .name("create")
         .description("Creates a channel with a SurrealDB instance")
+        .create_option(|option| {
+            option
+                .name("premade")
+                .description("a pre-populated database with example data")
+                .kind(CommandOptionType::String)
+                .add_string_choice(
+                    "Ecommerce database with people, products, as well as buy and review relations",
+                    "surreal_deal",
+                )
+        })
+        .create_option(|option| {
+            option
+                .name("file")
+                .description("a SurrealQL to load into the database instance")
+                .kind(CommandOptionType::Attachment)
+                .required(false)
+        })
 }
 
 async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {

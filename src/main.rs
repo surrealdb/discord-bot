@@ -16,7 +16,7 @@ async fn main() -> surrealdb::Result<()> {
     DB.connect::<File>("C:/Coding/!SurrealDB/SurrealBot/database.db")
         .await?;
     // DB.connect::<File>("A:/_Coding/!SurrealDB/SurrealBot/database.db")
-    //     .await?;
+    // .await?;
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;
 
     let secrets = fs::read_to_string("secrets.toml")
