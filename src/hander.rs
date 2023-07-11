@@ -31,7 +31,9 @@ impl EventHandler for Handler {
                     Ok(r) => r,
                     Err(e) => e.to_string(),
                 };
-                msg.reply(&ctx, reply).await.unwrap();
+                msg.reply(&ctx, format!("```json\n{}\n```", reply))
+                    .await
+                    .unwrap();
             }
         } else {
             return;
