@@ -47,8 +47,7 @@ pub async fn run(
                 PermissionOverwrite {
                     allow: Permissions::VIEW_CHANNEL
                         .union(Permissions::SEND_MESSAGES)
-                        .union(Permissions::READ_MESSAGE_HISTORY) // .union(Permissions::MANAGE_CHANNELS)
-                        .union(Permissions::MANAGE_ROLES),
+                        .union(Permissions::READ_MESSAGE_HISTORY),
                     deny: Permissions::empty(),
                     kind: serenity::model::prelude::PermissionOverwriteType::Member(UserId(
                         command.application_id.as_u64().clone(),
