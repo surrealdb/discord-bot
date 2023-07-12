@@ -31,9 +31,23 @@ impl EventHandler for Handler {
                     Ok(r) => r,
                     Err(e) => e.to_string(),
                 };
-                msg.reply(&ctx, format!("```json\n{}\n```", reply))
-                    .await
-                    .unwrap();
+
+                if reply.len() < 1900 {
+                    msg.reply(&ctx, format!("```json\n{}\n```", reply))
+                        .await
+                        .unwrap();
+                } else {
+                    let reply_attachment = AttachmentType::Bytes {
+                        data: std::borrow::Cow::Borrowed(reply.as_bytes()),
+                        filename: "response.json".to_string(),
+                    };
+                    msg.channel_id
+                        .send_message(&ctx, |m| {
+                            m.reference_message(&msg).add_file(reply_attachment)
+                        })
+                        .await
+                        .unwrap();
+                }
             }
         } else {
             return;
