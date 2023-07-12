@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::{Guild, GuildChannel, PermissionOverwrite, UserId};
@@ -79,38 +81,61 @@ pub async fn run(
             let db = Surreal::new::<Mem>(()).await.unwrap();
             db.use_ns("test").use_db("test").await.unwrap();
 
-            if command.data.options.len() > 1 {
-                interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
-                return Ok(());
-            }
-
-            if command.data.options.len() == 1 {
-                let op_option = command.data.options[0].clone();
-                match op_option.kind {
-                    CommandOptionType::String => match op_option.value.unwrap().as_str().unwrap() {
-                        "surreal_deal" => {
-                            println!("before import");
-                            db.import("premade/surreal_deal_mini.surql").await?;
-                            println!("after import");
+            match command.data.options.len().cmp(&1) {
+                Ordering::Greater => {
+                    interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                    return Ok(());
+                }
+                Ordering::Equal => {
+                    let op_option = command.data.options[0].clone();
+                    match op_option.kind {
+                        CommandOptionType::String => {
+                            match op_option.value.unwrap().as_str().unwrap() {
+                                "surreal_deal_mini" => {
+                                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
+                                    let db = db.clone();
+                                    let (channel, ctx, command) =
+                                        (channel.clone(), ctx.clone(), command.clone());
+                                    tokio::spawn(async move {
+                                        db.import("premade/surreal_deal_mini.surql").await.unwrap();
+                                        channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal(mini) dataset, try writing some SurrealQL!!!\n(note this will expire in {:#?}", command.user.id.as_u64(), DEFAULT_TTL)).await.unwrap();
+                                    });
+                                }
+                                "surreal_deal" => {
+                                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
+                                    let db = db.clone();
+                                    let (channel, ctx, command) =
+                                        (channel.clone(), ctx.clone(), command.clone());
+                                    tokio::spawn(async move {
+                                        db.import("premade/surreal_deal.surql").await.unwrap();
+                                        channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!\n(note this will expire in {:#?}", command.user.id.as_u64(), DEFAULT_TTL)).await.unwrap();
+                                    });
+                                }
+                                _ => {
+                                    println!("wildcard hit");
+                                    interaction_reply_ephemeral(
+                                        command,
+                                        ctx,
+                                        "Cannot find requested dataset",
+                                    )
+                                    .await?;
+                                    return Ok(());
+                                }
+                            }
                         }
+                        CommandOptionType::Attachment => {}
                         _ => {
-                            interaction_reply_ephemeral(
-                                command,
-                                ctx,
-                                "Cannot find requested dataset",
-                            )
-                            .await?;
+                            interaction_reply_ephemeral(command, ctx, "Unsupported option type")
+                                .await?;
                             return Ok(());
                         }
-                    },
-                    CommandOptionType::Attachment => {}
-                    _ => {
-                        interaction_reply_ephemeral(command, ctx, "Unsupported option type")
-                            .await?;
-                        return Ok(());
                     }
                 }
-            }
+                Ordering::Less => {
+                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await?;
+                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
+                }
+            };
 
             DBCONNS.lock().await.insert(
                 channel.id.as_u64().clone(),
@@ -121,8 +146,6 @@ pub async fn run(
                 },
             );
 
-            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await?;
-            interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
             tokio::spawn(async move {
                 let mut last_time;
                 let mut ttl;
@@ -167,7 +190,11 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
                 .description("a pre-populated database with example data")
                 .kind(CommandOptionType::String)
                 .add_string_choice(
-                    "Ecommerce database with people, products, as well as buy and review relations",
+                    "Ecommerce database with people, products, as well as buy and review relations(mini)",
+                    "surreal_deal_mini",
+                )
+                .add_string_choice(
+                    "Ecommerce database with people, products, as well as buy and review relations(large)",
                     "surreal_deal",
                 )
         })
