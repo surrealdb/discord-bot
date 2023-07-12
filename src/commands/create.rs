@@ -15,7 +15,9 @@ use tokio::time::{sleep_until, Instant};
 use crate::db_utils::*;
 
 use crate::config::Config;
-use crate::utils::{interaction_reply, interaction_reply_ephemeral};
+use crate::utils::{
+    interaction_followup, interaction_reply, interaction_reply_edit, interaction_reply_ephemeral,
+};
 use crate::{DB, DBCONNS, DEFAULT_TTL};
 
 pub async fn run(
@@ -132,9 +134,11 @@ pub async fn run(
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
+                                interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> you file is now being downloaded!!!", channel.id.as_u64())).await?;
                                 match attachment.download().await {
                                     Ok(data) => {
-                                        interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
+                                        interaction_reply_edit(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
+                                        println!("attachment downloaded");
 
                                         let db = db.clone();
                                         let (channel, ctx, command) =
@@ -144,11 +148,18 @@ pub async fn run(
                                             db.query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
                                                 .unwrap();
-                                            channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                            channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with your dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                            interaction_reply_edit(
+                                                &command,
+                                                ctx,
+                                                format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL to query your data!!!", channel.id.as_u64()),
+                                            )
+                                            .await
+                                            .unwrap();
                                         });
                                     }
                                     Err(why) => {
-                                        interaction_reply_ephemeral(
+                                        interaction_reply_edit(
                                             command,
                                             ctx,
                                             format!("Error with attachment: {}", why),
@@ -158,7 +169,7 @@ pub async fn run(
                                     }
                                 }
                             } else {
-                                interaction_reply_ephemeral(command, ctx, "Error with attachment")
+                                interaction_reply_edit(command, ctx, "Error with attachment")
                                     .await?;
                                 return Ok(());
                             }

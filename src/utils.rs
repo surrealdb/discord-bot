@@ -39,6 +39,28 @@ pub async fn interaction_reply_ephemeral(
     Ok(())
 }
 
+pub async fn interaction_reply_edit(
+    command: &ApplicationCommandInteraction,
+    ctx: Context,
+    content: impl ToString,
+) -> Result<(), anyhow::Error> {
+    command
+        .edit_original_interaction_response(&ctx.http, |response| response.content(content))
+        .await?;
+    Ok(())
+}
+
+pub async fn interaction_followup(
+    command: &ApplicationCommandInteraction,
+    ctx: Context,
+    content: impl ToString,
+) -> Result<(), anyhow::Error> {
+    command
+        .create_followup_message(&ctx.http, |response| response.content(content))
+        .await?;
+    Ok(())
+}
+
 pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
     PermissionOverwrite {
         allow: Permissions::VIEW_CHANNEL
