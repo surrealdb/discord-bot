@@ -1,13 +1,15 @@
 use serenity::{
     model::{
         prelude::{
-            application_command::ApplicationCommandInteraction, InteractionResponseType,
-            PermissionOverwrite, PermissionOverwriteType,
+            application_command::ApplicationCommandInteraction, GuildChannel,
+            InteractionResponseType, PermissionOverwrite, PermissionOverwriteType,
         },
         Permissions,
     },
     prelude::Context,
 };
+
+use crate::{db_utils::get_config, DBCONNS};
 
 pub async fn interaction_reply(
     command: &ApplicationCommandInteraction,
@@ -69,4 +71,31 @@ pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
         deny: Permissions::empty(),
         kind: kind,
     }
+}
+
+pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
+    let _ = channel
+        .say(
+            &ctx,
+            "This database instance has expired and is no longer functional",
+        )
+        .await;
+
+    DBCONNS.lock().await.remove(channel.id.as_u64());
+
+    let result = get_config(channel.guild_id).await;
+
+    let response = match result {
+        Ok(o) => o,
+        Err(_) => return,
+    };
+
+    let config = match response {
+        Some(c) => c,
+        None => return,
+    };
+
+    let _ = channel
+        .edit(ctx, |c| c.category(config.archive_channel))
+        .await;
 }

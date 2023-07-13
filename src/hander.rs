@@ -27,19 +27,26 @@ impl EventHandler for Handler {
             conn.last_used = Instant::now();
             let result = conn.db.query(&msg.content).await;
             if validate_msg(&msg) {
-                let reply = match process(true, true, result) {
+                let reply = match process(conn.pretty, conn.json, result) {
                     Ok(r) => r,
                     Err(e) => e.to_string(),
                 };
 
                 if reply.len() < 1900 {
-                    msg.reply(&ctx, format!("```json\n{}\n```", reply))
-                        .await
-                        .unwrap();
+                    msg.reply(
+                        &ctx,
+                        format!(
+                            "```{}\n{}\n```",
+                            if conn.json { "json" } else { "sql" },
+                            reply
+                        ),
+                    )
+                    .await
+                    .unwrap();
                 } else {
                     let reply_attachment = AttachmentType::Bytes {
                         data: std::borrow::Cow::Borrowed(reply.as_bytes()),
-                        filename: "response.json".to_string(),
+                        filename: format!("response.{}", if conn.json { "json" } else { "sql" }),
                     };
                     msg.channel_id
                         .send_message(&ctx, |m| {
@@ -56,6 +63,8 @@ impl EventHandler for Handler {
 
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+        ctx.set_activity(Activity::playing("Making cool things with SurrealDB"))
+            .await;
 
         for guild in ready.guilds {
             let commands =
@@ -75,6 +84,8 @@ impl EventHandler for Handler {
                 "create" => commands::create::run(&command, ctx.clone()).await,
                 "configure" => commands::configure::run(&command, ctx.clone()).await,
                 "share" => commands::share::run(&command, ctx.clone()).await,
+                "create_db_thread" => commands::create_db_thread::run(&command, ctx.clone()).await,
+                "load" => commands::load::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,

@@ -3,9 +3,9 @@ pub mod commands;
 pub mod config;
 pub mod db_utils;
 pub mod hander;
+pub mod premade;
 pub mod utils;
 
-use config::Config;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use surrealdb::Error;
@@ -22,14 +22,21 @@ use surrealdb::Surreal;
 
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 pub static DB: Surreal<Db> = Surreal::init();
-pub const DEFAULT_TTL: Duration = Duration::from_secs(20 * 60);
-// pub const DEFAULT_TTL: Duration = Duration::from_secs(20);
 
 #[derive(Debug)]
 pub struct Conn {
     db: Surreal<Db>,
     last_used: Instant,
+    conn_type: ConnType,
     ttl: Duration,
+    pretty: bool,
+    json: bool,
+}
+
+#[derive(Debug)]
+pub enum ConnType {
+    Channel,
+    Thread,
 }
 
 pub fn process(

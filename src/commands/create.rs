@@ -12,13 +12,12 @@ use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::time::{sleep_until, Instant};
 
-use crate::db_utils::*;
+use crate::{db_utils::*, ConnType};
+use crate::{premade, utils::*};
 
 use crate::config::Config;
-use crate::utils::{
-    interaction_followup, interaction_reply, interaction_reply_edit, interaction_reply_ephemeral,
-};
-use crate::{DB, DBCONNS, DEFAULT_TTL};
+use crate::utils::{interaction_reply, interaction_reply_edit, interaction_reply_ephemeral};
+use crate::{DB, DBCONNS};
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
@@ -96,23 +95,23 @@ pub async fn run(
                         CommandOptionType::String => {
                             match op_option.value.unwrap().as_str().unwrap() {
                                 "surreal_deal_mini" => {
-                                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", DEFAULT_TTL)).await.unwrap();
+                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal(mini) dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
                                     });
                                 }
                                 "surreal_deal" => {
-                                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", DEFAULT_TTL)).await.unwrap();
+                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
                                     });
@@ -134,17 +133,17 @@ pub async fn run(
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
-                                interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> you file is now being downloaded!!!", channel.id.as_u64())).await?;
+                                interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> your file is now being downloaded!!!", channel.id.as_u64())).await?;
                                 match attachment.download().await {
                                     Ok(data) => {
-                                        interaction_reply_edit(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
+                                        interaction_reply_edit(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
                                         println!("attachment downloaded");
 
                                         let db = db.clone();
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", DEFAULT_TTL)).await.unwrap();
+                                            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
                                             db.query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
                                                 .unwrap();
@@ -152,7 +151,7 @@ pub async fn run(
                                             interaction_reply_edit(
                                                 &command,
                                                 ctx,
-                                                format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL to query your data!!!", channel.id.as_u64()),
+                                                format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL to query your data!!!", channel.id.as_u64()),
                                             )
                                             .await
                                             .unwrap();
@@ -182,8 +181,8 @@ pub async fn run(
                     }
                 }
                 Ordering::Less => {
-                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", DEFAULT_TTL)).await?;
-                    interaction_reply(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
+                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", config.ttl)).await?;
+                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
                 }
             };
 
@@ -192,7 +191,10 @@ pub async fn run(
                 crate::Conn {
                     db: db,
                     last_used: Instant::now(),
-                    ttl: DEFAULT_TTL.clone(),
+                    conn_type: ConnType::Channel,
+                    ttl: config.ttl.clone(),
+                    pretty: config.pretty.clone(),
+                    json: config.json.clone(),
                 },
             );
 
@@ -234,20 +236,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
     command
         .name("create")
         .description("Creates a channel with a SurrealDB instance")
-        .create_option(|option| {
-            option
-                .name("premade")
-                .description("a pre-populated database with example data")
-                .kind(CommandOptionType::String)
-                .add_string_choice(
-                    "Ecommerce database with people, products, as well as buy and review relations(mini)",
-                    "surreal_deal_mini",
-                )
-                .add_string_choice(
-                    "Ecommerce database with people, products, as well as buy and review relations(large)",
-                    "surreal_deal",
-                )
-        })
+        .create_option(premade::register)
         .create_option(|option| {
             option
                 .name("file")
@@ -255,31 +244,4 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
                 .kind(CommandOptionType::Attachment)
                 .required(false)
         })
-}
-
-async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
-    let _ = channel
-        .say(
-            &ctx,
-            "This database instance has expired and is no longer functional",
-        )
-        .await;
-
-    DBCONNS.lock().await.remove(channel.id.as_u64());
-
-    let result = get_config(channel.guild_id).await;
-
-    let response = match result {
-        Ok(o) => o,
-        Err(_) => return,
-    };
-
-    let config = match response {
-        Some(c) => c,
-        None => return,
-    };
-
-    let _ = channel
-        .edit(ctx, |c| c.category(config.archive_channel))
-        .await;
 }

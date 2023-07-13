@@ -6,6 +6,8 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
+use tokio::time::Duration;
+
 use crate::config::Config;
 use crate::utils::interaction_reply;
 use crate::DB;
@@ -55,6 +57,26 @@ pub async fn run(
                 .parse::<u64>()
                 .unwrap(),
         ),
+        ttl: Duration::from_secs(
+            command.data.options[2]
+                .value
+                .clone()
+                .unwrap()
+                .as_u64()
+                .unwrap(),
+        ),
+        pretty: command.data.options[3]
+            .value
+            .clone()
+            .unwrap()
+            .as_bool()
+            .unwrap(),
+        json: command.data.options[4]
+            .value
+            .clone()
+            .unwrap()
+            .as_bool()
+            .unwrap(),
     };
 
     println!("created config struct");
@@ -97,6 +119,28 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
                 .description("channel category for archived database instances")
                 .kind(CommandOptionType::Channel)
                 .channel_types(&[ChannelType::Category])
+                .required(true)
+        })
+        .create_option(|option| {
+            option
+                .name("ttl")
+                .description("The default time to live for created channels in seconds")
+                .kind(CommandOptionType::Integer)
+                .required(true)
+        })
+        .create_option(|option| {
+            option
+                .name("pretty")
+                .description("whether or not to pretty print responses")
+                .kind(CommandOptionType::Boolean)
+                .required(true)
+        })
+        .create_option(|option| {
+            option
+                .name("json")
+                .description("whether to format output as JSON, the alternative is SurrealQL")
+                .kind(CommandOptionType::Boolean)
+                .default_option(false)
                 .required(true)
         })
 }
