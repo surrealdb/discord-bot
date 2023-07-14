@@ -12,9 +12,9 @@ use surreal_bot::DB;
 
 #[tokio::main]
 async fn main() -> surrealdb::Result<()> {
-    // DB.connect::<Mem>(()).await?;
-    DB.connect::<File>("C:/Coding/!SurrealDB/SurrealBot/database.db")
-        .await?;
+    DB.connect::<Mem>(()).await?;
+    // DB.connect::<File>("C:/Coding/!SurrealDB/SurrealBot/database.db")
+    //     .await?;
     // DB.connect::<File>("A:/_Coding/!SurrealDB/SurrealBot/database.db")
     // .await?;
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;

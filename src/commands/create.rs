@@ -32,7 +32,7 @@ pub async fn run(
                 Ok(response) => {
                     match response {
                         Some(c) => {c}
-                        None => return interaction_reply(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
+                        None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
                     }
                 }
                 Err(e) => return interaction_reply(command, ctx, format!("Database error: {}", e)).await,

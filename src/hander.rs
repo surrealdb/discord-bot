@@ -86,6 +86,7 @@ impl EventHandler for Handler {
                 "share" => commands::share::run(&command, ctx.clone()).await,
                 "create_db_thread" => commands::create_db_thread::run(&command, ctx.clone()).await,
                 "load" => commands::load::run(&command, ctx.clone()).await,
+                "config_update" => commands::config_update::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,

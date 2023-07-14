@@ -12,7 +12,6 @@ use crate::config;
 use crate::config::Config;
 use crate::config::ConfigBuilder;
 use crate::utils::interaction_reply;
-use crate::utils::interaction_reply_ephemeral;
 use crate::DB;
 
 pub async fn run(
@@ -26,39 +25,30 @@ pub async fn run(
         .select(("guild_config", command.guild_id.unwrap().to_string()))
         .await;
 
-    match result {
+    let mut config: Config = match result {
         Ok(response) => match response {
-            Some(c) => return interaction_reply(command, ctx.clone(), format!("This server is already configured with: {:?}\n Try using /configUpdate to change the config", c)).await,
+            Some(c) => {c}
 
-            None => {}
+            None => return interaction_reply(command, ctx.clone(), format!("This server is not yet configured, use /configure to add initial configuration")).await,
         },
         Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
 
-    assert_eq!(command.data.options[0].name, "active");
-    assert_eq!(command.data.options[1].name, "archive");
-
-    let config = match Config::from_builder(ConfigBuilder::build(command)) {
-        Some(c) => c,
-        None => {
-            return interaction_reply_ephemeral(
-                command,
-                ctx,
-                "Error building config, please ensure all fields are present",
-            )
-            .await;
-        }
-    };
-
-    println!("created config struct");
+    println!("existing config struct");
     println!("{:?}", config);
 
-    let created: Result<Option<Config>, surrealdb::Error> = DB
-        .create(("guild_config", config.guild_id.to_string()))
+    let changes: ConfigBuilder = ConfigBuilder::build(command);
+    config.merge(changes);
+
+    println!("edited config struct");
+    println!("{:?}", config);
+
+    let updated: Result<Option<Config>, surrealdb::Error> = DB
+        .update(("guild_config", config.guild_id.to_string()))
         .content(config)
         .await;
 
-    let msg = match created {
+    let msg = match updated {
         Ok(response) => match response {
             Some(c) => {
                 format!("This server is now configured with: {:?}", c)
@@ -74,9 +64,9 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     config::register_options(
         command
-            .name("configure")
-            .description("Configure options for SurrealBot")
+            .name("config_update")
+            .description("Update configuration options for SurrealBot")
             .default_member_permissions(Permissions::MANAGE_CHANNELS),
-        true,
+        false,
     )
 }
