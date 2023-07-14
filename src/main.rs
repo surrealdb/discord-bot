@@ -1,9 +1,8 @@
-use std::fs;
-
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use toml;
+use dotenv::dotenv;
+use std::env;
 
 use surrealdb::engine::local::Mem;
 
@@ -11,20 +10,20 @@ use surreal_bot::hander::Handler;
 use surreal_bot::DB;
 
 #[tokio::main]
-async fn main() -> surrealdb::Result<()> {
+async fn main() -> Result<(), anyhow::Error> {
     DB.connect::<Mem>(()).await?;
-    // DB.connect::<File>("C:/Coding/!SurrealDB/SurrealBot/database.db")
-    //     .await?;
-    // DB.connect::<File>("A:/_Coding/!SurrealDB/SurrealBot/database.db")
-    // .await?;
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;
 
-    let secrets = fs::read_to_string("secrets.toml")
-        .expect("expected secrets.toml file")
-        .parse::<toml::Value>()
-        .expect("expected valid json");
+    // let secrets = fs::read_to_string("secrets.toml")
+    //     .expect("expected secrets.toml file")
+    //     .parse::<toml::Value>()
+    //     .expect("expected valid json");
 
-    let token = secrets["DISCORD_TOKEN"].as_str().expect("token");
+    // let token = secrets["DISCORD_TOKEN"].as_str().expect("token");
+
+    dotenv()?;
+    let token = env::var("DISCORD_TOKEN")?;
+
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let mut client = Client::builder(token, intents)
         .event_handler(Handler)
