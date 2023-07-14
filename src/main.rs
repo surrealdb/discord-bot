@@ -14,13 +14,6 @@ async fn main() -> Result<(), anyhow::Error> {
     DB.connect::<Mem>(()).await?;
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;
 
-    // let secrets = fs::read_to_string("secrets.toml")
-    //     .expect("expected secrets.toml file")
-    //     .parse::<toml::Value>()
-    //     .expect("expected valid json");
-
-    // let token = secrets["DISCORD_TOKEN"].as_str().expect("token");
-
     dotenv()?;
     let token = env::var("DISCORD_TOKEN")?;
 

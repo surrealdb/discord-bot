@@ -1,0 +1,33 @@
+name: Release 
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build crate
+      run: cargo build --release --verbose
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag surreal_bot:${{ github.ref_name }}
+
+    - name: Configure DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASS }}
+
+    - name: Build and Push
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        push: true
+        platforms: linux/amd64
+        tags: surrealdb/surreal_bot:latest,surrealdb/surrealbot:${{ github.ref_name }}
