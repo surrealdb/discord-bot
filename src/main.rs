@@ -5,7 +5,7 @@ use serenity::prelude::*;
 
 use toml;
 
-use surrealdb::engine::local::{File, Mem};
+use surrealdb::engine::local::Mem;
 
 use surreal_bot::hander::Handler;
 use surreal_bot::DB;
