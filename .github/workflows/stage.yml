@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build crate
-      run: cargo build --verbose
+      run: cargo build --release --verbose
     - name: Create secrets.toml
       run: echo "DISCORD_TOKEN=\"${{secrets.STAGING_DISCORD_TOKEN}}\"">secrets.toml
     - name: Build the Docker image
