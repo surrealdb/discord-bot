@@ -17,4 +17,4 @@ jobs:
     - name: Create secrets.toml
       run: echo "DISCORD_TOKEN=\"${{secrets.STAGING_DISCORD_TOKEN}}\"">secrets.toml
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag SurrealBot:$(date +%s)
+      run: docker build . --file Dockerfile --tag surreal_bot:$(date +%s)
