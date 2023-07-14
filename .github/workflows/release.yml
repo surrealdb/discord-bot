@@ -30,4 +30,4 @@ jobs:
         context: .
         push: true
         platforms: linux/amd64
-        tags: surrealdb/surreal_bot:latest,surrealdb/surrealbot:${{ github.ref_name }}
+        tags: surrealdb/discord-bot:latest,surrealdb/discord-bot:${{ github.ref_name }}
