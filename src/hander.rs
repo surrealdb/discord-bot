@@ -33,9 +33,12 @@ impl EventHandler for Handler {
         }
 
         if let Some(conn) = DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
+            if conn.require_query {
+                return;
+            }
             conn.last_used = Instant::now();
-            let result = conn.db.query(&msg.content).await;
             if validate_msg(&msg) {
+                let result = conn.db.query(&msg.content).await;
                 let reply = match process(conn.pretty, conn.json, result) {
                     Ok(r) => r,
                     Err(e) => e.to_string(),
@@ -65,8 +68,6 @@ impl EventHandler for Handler {
                         .unwrap();
                 }
             }
-        } else {
-            return;
         }
     }
 
@@ -101,6 +102,7 @@ impl EventHandler for Handler {
                 "configure_channel" => {
                     commands::configure_channel::run(&command, ctx.clone()).await
                 }
+                "query" => commands::query::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,

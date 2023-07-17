@@ -6,6 +6,7 @@ pub mod configure_channel;
 pub mod create;
 pub mod create_db_thread;
 pub mod load;
+pub mod query;
 pub mod share;
 
 use serenity::builder::CreateApplicationCommands;
@@ -21,4 +22,5 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| clean_all::register(command))
         .create_application_command(|command| clean::register(command))
         .create_application_command(|command| configure_channel::register(command))
+        .create_application_command(|command| query::register(command))
 }

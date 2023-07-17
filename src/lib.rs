@@ -31,6 +31,7 @@ pub struct Conn {
     ttl: Duration,
     pretty: bool,
     json: bool,
+    require_query: bool,
 }
 
 #[derive(Debug, Clone)]

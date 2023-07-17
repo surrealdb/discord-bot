@@ -57,6 +57,7 @@ pub async fn run(
                     ttl: config.ttl.clone(),
                     pretty: config.pretty.clone(),
                     json: config.json.clone(),
+                    require_query: false,
                 },
             );
 
