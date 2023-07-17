@@ -10,11 +10,11 @@ pub fn register(
         .description("a pre-populated database with example data")
         .kind(CommandOptionType::String)
         .add_string_choice(
-            "Ecommerce database with people, products, as well as buy and review relations(mini)",
+            "(mini)Ecommerce database with people, products, as well as buy and review relations",
             "surreal_deal_mini",
         )
         .add_string_choice(
-            "Ecommerce database with people, products, as well as buy and review relations(large)",
+            "(large)Ecommerce database with people, products, as well as buy and review relations",
             "surreal_deal",
         )
 }

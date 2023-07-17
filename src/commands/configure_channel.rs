@@ -4,11 +4,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
-use crate::config::Config;
-use crate::config::ConfigBuilder;
-use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_ephemeral;
-use crate::DB;
 use crate::DBCONNS;
 
 pub async fn run(

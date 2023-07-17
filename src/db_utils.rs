@@ -1,4 +1,3 @@
-use anyhow::Error;
 use serenity::model::prelude::*;
 
 use crate::{channel_info::ChannelInfo, config::Config, DB};

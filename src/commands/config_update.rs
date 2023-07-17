@@ -1,12 +1,8 @@
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::*;
 use serenity::model::Permissions;
 
 use serenity::builder::CreateApplicationCommand;
-use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
-
-use tokio::time::Duration;
 
 use crate::config;
 use crate::config::Config;

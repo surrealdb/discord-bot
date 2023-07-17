@@ -1,6 +1,5 @@
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::Guild;
 
 use serenity::prelude::Context;
 use surrealdb::engine::local::Mem;

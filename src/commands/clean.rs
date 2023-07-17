@@ -7,7 +7,6 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
 use crate::utils::clean_channel;
-use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_ephemeral;
 use crate::DBCONNS;
 

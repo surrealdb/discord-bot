@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serenity::{
-    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
+    builder::CreateApplicationCommand,
     model::prelude::{
-        application_command::{ApplicationCommandInteraction, CommandDataOption},
-        command::CommandOptionType,
-        ChannelId, ChannelType, GuildId,
+        application_command::ApplicationCommandInteraction, command::CommandOptionType, ChannelId,
+        ChannelType, GuildId,
     },
 };
 use tokio::time::Duration;

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serenity::model::prelude::{ChannelId, GuildId, UserId};
+use serenity::model::prelude::{GuildId, UserId};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ChannelInfo {

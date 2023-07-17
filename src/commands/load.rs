@@ -9,7 +9,7 @@ use serenity::model::prelude::{AttachmentType, GuildChannel};
 
 use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::Context;
-use surrealdb::engine::local::{Db, Mem};
+use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 use tokio::time::Instant;
 

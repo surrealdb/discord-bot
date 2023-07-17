@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
+use std::path::Path;
 
 use serenity::model::prelude::application_command::{
     ApplicationCommandInteraction, CommandDataOptionValue,
 };
 use serenity::model::prelude::command::CommandOptionType;
-use serenity::model::prelude::{Guild, GuildChannel, PermissionOverwrite, UserId};
+use serenity::model::prelude::{AttachmentType, Guild, PermissionOverwrite, UserId};
 use serenity::model::Permissions;
 use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
@@ -12,7 +13,7 @@ use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::time::{sleep_until, Instant};
 
-use crate::{db_utils::*, ConnType};
+use crate::ConnType;
 use crate::{premade, utils::*};
 
 use crate::config::Config;
@@ -100,9 +101,19 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal(mini) dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                        channel
+                                            .send_files(
+                                                ctx,
+                                                [AttachmentType::Path(&Path::new(
+                                                    "premade/surreal_deal.png",
+                                                ))],
+                                                |m| m.content("schema:"),
+                                            )
+                                            .await
+                                            .unwrap();
                                     });
                                 }
                                 "surreal_deal" => {
@@ -111,9 +122,19 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                        channel
+                                            .send_files(
+                                                ctx,
+                                                [AttachmentType::Path(&Path::new(
+                                                    "premade/surreal_deal.png",
+                                                ))],
+                                                |m| m.content("schema:"),
+                                            )
+                                            .await
+                                            .unwrap();
                                     });
                                 }
                                 _ => {
@@ -143,7 +164,7 @@ pub async fn run(
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n(note this will expire in {:#?}", config.ttl)).await.unwrap();
+                                            channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
                                             db.query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
                                                 .unwrap();
