@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::path::Path;
 
+use memorable_wordlist::kebab_case;
 use serenity::model::prelude::application_command::{
     ApplicationCommandInteraction, CommandDataOptionValue,
 };
@@ -75,7 +76,7 @@ pub async fn run(
 
             let channel = guild
                 .create_channel(&ctx, |c| {
-                    c.name(command.id.to_string())
+                    c.name(kebab_case(40))
                         .kind(ChannelType::Text)
                         .category(config.active_channel)
                         .permissions(perms)

@@ -1,6 +1,7 @@
 use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
 
+use memorable_wordlist::kebab_case;
 use serenity::prelude::Context;
 use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
@@ -38,7 +39,7 @@ pub async fn run(
 
             let channel = command
                 .channel_id
-                .create_public_thread(&ctx, message, |t| t.name(command.id.to_string()))
+                .create_public_thread(&ctx, message, |t| t.name(kebab_case(40)))
                 .await?;
 
             let db = Surreal::new::<Mem>(()).await.unwrap();
