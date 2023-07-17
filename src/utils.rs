@@ -98,4 +98,8 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
     let _ = channel
         .edit(ctx, |c| c.category(config.archive_channel))
         .await;
+
+    let _ = channel
+        .edit_thread(ctx, |thread| thread.archived(true))
+        .await;
 }
