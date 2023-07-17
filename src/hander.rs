@@ -24,6 +24,14 @@ pub struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
+        match msg.content.chars().next() {
+            Some('#') => return,
+            Some('/') => return,
+            Some('-') => return,
+            None => return,
+            _ => {}
+        }
+
         if let Some(conn) = DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
             conn.last_used = Instant::now();
             let result = conn.db.query(&msg.content).await;
