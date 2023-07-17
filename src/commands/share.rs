@@ -1,5 +1,3 @@
-use anyhow::bail;
-use serenity::futures::channel::oneshot::channel;
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::*;
 use serenity::model::Permissions;
@@ -8,11 +6,8 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
-use crate::config::Config;
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_ephemeral;
-use crate::utils::read_view_perms;
-use crate::DB;
 use crate::DBCONNS;
 
 pub async fn run(

@@ -9,6 +9,7 @@ use tokio::time::Instant;
 use crate::commands;
 use crate::process;
 use crate::utils::interaction_reply;
+use crate::utils::interaction_reply_ephemeral;
 use crate::DBCONNS;
 
 fn validate_msg(msg: &Message) -> bool {
@@ -87,6 +88,8 @@ impl EventHandler for Handler {
                 "create_db_thread" => commands::create_db_thread::run(&command, ctx.clone()).await,
                 "load" => commands::load::run(&command, ctx.clone()).await,
                 "config_update" => commands::config_update::run(&command, ctx.clone()).await,
+                "clean_all" => commands::clean_all::run(&command, ctx.clone()).await,
+                "clean" => commands::clean::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,
@@ -99,6 +102,9 @@ impl EventHandler for Handler {
 
             if let Err(why) = res {
                 println!("Cannot respond to slash command: {}", why);
+                interaction_reply_ephemeral(&command, ctx, why)
+                    .await
+                    .unwrap();
             }
         }
     }

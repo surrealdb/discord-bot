@@ -1,3 +1,5 @@
+pub mod clean;
+pub mod clean_all;
 pub mod config_update;
 pub mod configure;
 pub mod configure_channel;
@@ -16,4 +18,6 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| create_db_thread::register(command))
         .create_application_command(|command| load::register(command))
         .create_application_command(|command| config_update::register(command))
+        .create_application_command(|command| clean_all::register(command))
+        .create_application_command(|command| clean::register(command))
 }

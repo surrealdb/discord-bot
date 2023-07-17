@@ -23,7 +23,7 @@ use surrealdb::Surreal;
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 pub static DB: Surreal<Db> = Surreal::init();
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Conn {
     db: Surreal<Db>,
     last_used: Instant,
@@ -33,7 +33,7 @@ pub struct Conn {
     json: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConnType {
     Channel,
     Thread,
