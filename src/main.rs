@@ -14,7 +14,7 @@ async fn main() -> Result<(), anyhow::Error> {
     DB.connect::<Mem>(()).await?;
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;
 
-    dotenv()?;
+    dotenv().ok();
     let token = env::var("DISCORD_TOKEN")?;
 
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
