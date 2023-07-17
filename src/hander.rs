@@ -90,6 +90,9 @@ impl EventHandler for Handler {
                 "config_update" => commands::config_update::run(&command, ctx.clone()).await,
                 "clean_all" => commands::clean_all::run(&command, ctx.clone()).await,
                 "clean" => commands::clean::run(&command, ctx.clone()).await,
+                "configure_channel" => {
+                    commands::configure_channel::run(&command, ctx.clone()).await
+                }
                 _ => {
                     interaction_reply(
                         &command,

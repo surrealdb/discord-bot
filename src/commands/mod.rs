@@ -20,4 +20,5 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| config_update::register(command))
         .create_application_command(|command| clean_all::register(command))
         .create_application_command(|command| clean::register(command))
+        .create_application_command(|command| configure_channel::register(command))
 }
