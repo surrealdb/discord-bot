@@ -37,7 +37,7 @@ pub async fn run(
                         None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
                     }
                 }
-                Err(e) => return interaction_reply(command, ctx, format!("Database error: {}", e)).await,
+                Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
             };
 
             println!("options array length:{:?}", command.data.options.len());
@@ -97,7 +97,7 @@ pub async fn run(
                         CommandOptionType::String => {
                             match op_option.value.unwrap().as_str().unwrap() {
                                 "surreal_deal_mini" => {
-                                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
@@ -118,7 +118,7 @@ pub async fn run(
                                     });
                                 }
                                 "surreal_deal" => {
-                                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
@@ -155,7 +155,7 @@ pub async fn run(
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
-                                interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> your file is now being downloaded!!!", channel.id.as_u64())).await?;
+                                interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> your file is now being downloaded!!!", channel.id.as_u64())).await?;
                                 match attachment.download().await {
                                     Ok(data) => {
                                         interaction_reply_edit(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
@@ -204,7 +204,7 @@ pub async fn run(
                 }
                 Ordering::Less => {
                     channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", config.ttl)).await?;
-                    interaction_reply(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
+                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
                 }
             };
 
