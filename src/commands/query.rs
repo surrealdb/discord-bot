@@ -6,7 +6,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::Context;
 use tokio::time::Instant;
 
-use crate::{premade, process};
+use crate::process;
 
 use crate::utils::{interaction_reply, interaction_reply_ephemeral};
 use crate::DBCONNS;

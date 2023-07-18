@@ -103,6 +103,7 @@ impl EventHandler for Handler {
                     commands::configure_channel::run(&command, ctx.clone()).await
                 }
                 "query" => commands::query::run(&command, ctx.clone()).await,
+                "q" => commands::q::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,

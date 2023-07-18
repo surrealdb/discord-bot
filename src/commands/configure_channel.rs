@@ -18,6 +18,9 @@ pub async fn run(
             match option.name.as_str() {
                 "pretty" => conn.pretty = option.value.clone().unwrap().as_bool().unwrap(),
                 "json" => conn.json = option.value.clone().unwrap().as_bool().unwrap(),
+                "require_query" => {
+                    conn.require_query = option.value.clone().unwrap().as_bool().unwrap()
+                }
                 _ => {}
             }
         }
@@ -25,8 +28,8 @@ pub async fn run(
             command,
             ctx,
             format!(
-                "This channel is now configured with pretty printing:{}, json:{}",
-                conn.pretty, conn.json
+                "This channel is now configured with pretty printing:{}, json:{}, require_query: {}",
+                conn.pretty, conn.json, conn.require_query
             ),
         )
         .await?;
@@ -57,6 +60,14 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
             option
                 .name("json")
                 .description("whether to format output as JSON, the alternative is SurrealQL")
+                .kind(CommandOptionType::Boolean)
+                .default_option(false)
+                .required(false)
+        })
+        .create_option(|option| {
+            option
+                .name("require_query")
+                .description("whether the /query command is requred to contact the database")
                 .kind(CommandOptionType::Boolean)
                 .default_option(false)
                 .required(false)

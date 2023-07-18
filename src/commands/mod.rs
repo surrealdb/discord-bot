@@ -6,6 +6,7 @@ pub mod configure_channel;
 pub mod create;
 pub mod create_db_thread;
 pub mod load;
+pub mod q;
 pub mod query;
 pub mod share;
 
