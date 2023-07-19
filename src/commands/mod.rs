@@ -3,6 +3,7 @@ pub mod clean_all;
 pub mod config_update;
 pub mod configure;
 pub mod configure_channel;
+pub mod connect;
 pub mod create;
 pub mod create_db_thread;
 pub mod load;
