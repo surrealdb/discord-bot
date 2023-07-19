@@ -12,14 +12,12 @@ use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
-use tokio::time::{sleep_until, Instant};
 
-use crate::ConnType;
 use crate::{premade, utils::*};
 
 use crate::config::Config;
 use crate::utils::{interaction_reply, interaction_reply_edit, interaction_reply_ephemeral};
-use crate::{DB, DBCONNS};
+use crate::DB;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
@@ -83,8 +81,8 @@ pub async fn run(
                 })
                 .await
                 .unwrap();
-            let db = Surreal::new::<Mem>(()).await.unwrap();
-            db.use_ns("test").use_db("test").await.unwrap();
+            let db = Surreal::new::<Mem>(()).await?;
+            db.use_ns("test").use_db("test").await?;
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
@@ -102,7 +100,7 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal(mini) dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
                                         channel
@@ -123,7 +121,7 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
                                         channel
@@ -165,7 +163,7 @@ pub async fn run(
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this will expire in {:#?})", config.ttl)).await.unwrap();
+                                            channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
                                             db.query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
                                                 .unwrap();
@@ -203,45 +201,20 @@ pub async fn run(
                     }
                 }
                 Ordering::Less => {
-                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this will expire in {:#?})", config.ttl)).await?;
+                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
                     interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
                 }
             };
 
-            DBCONNS.lock().await.insert(
-                channel.id.as_u64().clone(),
-                crate::Conn {
-                    db: db,
-                    last_used: Instant::now(),
-                    conn_type: ConnType::Channel,
-                    ttl: config.ttl.clone(),
-                    pretty: config.pretty.clone(),
-                    json: config.json.clone(),
-                    require_query: false,
-                },
-            );
-
-            tokio::spawn(async move {
-                let mut last_time;
-                let mut ttl;
-                loop {
-                    match DBCONNS.lock().await.get(channel.id.as_u64()) {
-                        Some(e) => {
-                            last_time = e.last_used;
-                            ttl = e.ttl
-                        }
-                        None => {
-                            clean_channel(channel, &ctx).await;
-                            break;
-                        }
-                    }
-                    if last_time.elapsed() >= ttl {
-                        clean_channel(channel, &ctx).await;
-                        break;
-                    }
-                    sleep_until(last_time + ttl).await;
-                }
-            });
+            register_db(
+                ctx,
+                db,
+                channel,
+                config,
+                crate::ConnType::EphemeralChannel,
+                false,
+            )
+            .await?;
             return Ok(());
         }
         None => {

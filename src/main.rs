@@ -6,7 +6,7 @@ use std::env;
 
 use surrealdb::engine::local::Mem;
 
-use surreal_bot::hander::Handler;
+use surreal_bot::handler::Handler;
 use surreal_bot::DB;
 
 #[tokio::main]

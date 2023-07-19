@@ -104,11 +104,12 @@ impl EventHandler for Handler {
                 }
                 "query" => commands::query::run(&command, ctx.clone()).await,
                 "q" => commands::q::run(&command, ctx.clone()).await,
+                "connect" => commands::connect::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,
                         ctx.clone(),
-                        "Command is curretnly not implemented".to_string(),
+                        "Command is currently not implemented".to_string(),
                     )
                     .await
                 }

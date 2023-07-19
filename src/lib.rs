@@ -2,7 +2,7 @@ pub mod channel_info;
 pub mod commands;
 pub mod config;
 pub mod db_utils;
-pub mod hander;
+pub mod handler;
 pub mod premade;
 pub mod utils;
 
@@ -36,7 +36,8 @@ pub struct Conn {
 
 #[derive(Debug, Clone)]
 pub enum ConnType {
-    Channel,
+    ConnectedChannel,
+    EphemeralChannel,
     Thread,
 }
 

@@ -8,7 +8,7 @@ use serenity::{
 };
 use tokio::time::Duration;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     pub guild_id: GuildId,
     pub active_channel: ChannelId,
@@ -50,7 +50,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ConfigBuilder {
     pub guild_id: Option<GuildId>,
     pub active_channel: Option<ChannelId>,

@@ -1,55 +1,68 @@
 use std::cmp::Ordering;
 use std::path::Path;
 
-use memorable_wordlist::kebab_case;
+use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::application_command::{
     ApplicationCommandInteraction, CommandDataOptionValue,
 };
 use serenity::model::prelude::command::CommandOptionType;
-use serenity::model::prelude::{AttachmentType, Guild, GuildChannel, PermissionOverwrite, UserId};
-use serenity::model::Permissions;
+use serenity::model::prelude::{AttachmentType, GuildChannel};
 use serenity::prelude::Context;
-use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use surrealdb::engine::local::{Db, Mem};
 use surrealdb::Surreal;
-use tokio::time::{sleep_until, Instant};
 
-use crate::ConnType;
-use crate::{premade, utils::*};
+use crate::{premade, utils::*, DBCONNS};
 
 use crate::config::Config;
 use crate::utils::{interaction_reply, interaction_reply_edit, interaction_reply_ephemeral};
-use crate::{DB, DBCONNS};
+use crate::DB;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    if command.data.options.len() == 0 {
+    if DBCONNS
+        .lock()
+        .await
+        .contains_key(command.channel_id.as_u64())
+    {
         interaction_reply_ephemeral(
             command,
             ctx,
-            "Please select premade dataset or supply SurrealQL file to load",
+            "This channel already has an associated database instance",
         )
         .await?;
         return Ok(());
     }
     match command.guild_id {
-        Some(_guild_id) => {
-            println!("options array length:{:?}", command.data.options.len());
+        Some(id) => {
+            let result: Result<Option<Config>, surrealdb::Error> =
+                DB.select(("guild_config", id.to_string())).await;
+
+            let config = match result {
+                Ok(response) => {
+                    match response {
+                        Some(c) => {c}
+                        None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
+                    }
+                }
+                Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
+            };
 
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
 
-            let db = match DBCONNS.lock().await.get_mut(command.channel_id.as_u64()) {
-                Some(c) => {
-                    c.last_used = Instant::now();
-                    c.db.clone()
-                }
-                None => {
-                    interaction_reply_ephemeral(command, ctx, "Can't ").await?;
-                    return Ok(());
-                }
-            };
+            let db = Surreal::new::<Mem>(()).await?;
+            db.use_ns("test").use_db("test").await?;
+
+            register_db(
+                ctx.clone(),
+                db.clone(),
+                channel.clone(),
+                config.clone(),
+                crate::ConnType::ConnectedChannel,
+                true,
+            )
+            .await?;
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
@@ -86,7 +99,6 @@ pub async fn run(
                                     .await?;
                                 }
                                 _ => {
-                                    println!("wildcard hit");
                                     interaction_reply_ephemeral(
                                         command,
                                         ctx,
@@ -153,7 +165,7 @@ pub async fn run(
                         }
                     }
                 }
-                Ordering::Less => panic!(),
+                Ordering::Less => interaction_reply(command, ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the /query command!!!\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?,
             };
 
             return Ok(());
@@ -168,9 +180,10 @@ pub async fn run(
         }
     }
 }
+
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
-        .name("create")
+        .name("connect")
         .description("Creates a SurrealDB instance and associates it with the current channel")
         .create_option(premade::register)
         .create_option(|option| {
@@ -210,7 +223,7 @@ async fn load_premade(
                         &command,
                         ctx.clone(),
                         format!(
-                            "Data is now loaded and you can query the {} dataset!!!",
+                            "Data is now loaded and you can query the {} dataset with the /query command!!!",
                             name
                         ),
                     )

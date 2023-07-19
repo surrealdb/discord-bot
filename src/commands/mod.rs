@@ -26,4 +26,5 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| configure_channel::register(command))
         .create_application_command(|command| query::register(command))
         .create_application_command(|command| q::register(command))
+        .create_application_command(|command| connect::register(command))
 }

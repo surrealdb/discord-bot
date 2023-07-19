@@ -5,14 +5,12 @@ use memorable_wordlist::kebab_case;
 use serenity::prelude::Context;
 use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
-use tokio::time::{sleep_until, Instant};
 
 use crate::utils::*;
-use crate::ConnType;
 
 use crate::config::Config;
 use crate::utils::interaction_reply;
-use crate::{DB, DBCONNS};
+use crate::DB;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
@@ -45,43 +43,10 @@ pub async fn run(
             let db = Surreal::new::<Mem>(()).await.unwrap();
             db.use_ns("test").use_db("test").await.unwrap();
 
-            channel.say(&ctx, format!("This public thread is now connected to a SurrealDB instance, try writing some SurrealQL!!!\nuse /load to load a premade dataset or your own SurrealQL\n(note this will expire in {:#?})", config.ttl)).await?;
+            channel.say(&ctx, format!("This public thread is now connected to a SurrealDB instance, try writing some SurrealQL!!!\nuse /load to load a premade dataset or your own SurrealQL\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
             interaction_reply_ephemeral(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
 
-            DBCONNS.lock().await.insert(
-                channel.id.as_u64().clone(),
-                crate::Conn {
-                    db: db,
-                    last_used: Instant::now(),
-                    conn_type: ConnType::Thread,
-                    ttl: config.ttl.clone(),
-                    pretty: config.pretty.clone(),
-                    json: config.json.clone(),
-                    require_query: false,
-                },
-            );
-
-            tokio::spawn(async move {
-                let mut last_time;
-                let mut ttl;
-                loop {
-                    match DBCONNS.lock().await.get(channel.id.as_u64()) {
-                        Some(e) => {
-                            last_time = e.last_used;
-                            ttl = e.ttl
-                        }
-                        None => {
-                            clean_channel(channel, &ctx).await;
-                            break;
-                        }
-                    }
-                    if last_time.elapsed() >= ttl {
-                        clean_channel(channel, &ctx).await;
-                        break;
-                    }
-                    sleep_until(last_time + ttl).await;
-                }
-            });
+            register_db(ctx, db, channel, config, crate::ConnType::Thread, false).await?;
             return Ok(());
         }
         None => {
