@@ -2,9 +2,7 @@ use std::cmp::Ordering;
 use std::path::Path;
 
 use serenity::builder::CreateApplicationCommand;
-use serenity::model::prelude::application_command::{
-    ApplicationCommandInteraction, CommandDataOptionValue,
-};
+use serenity::model::prelude::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::{AttachmentType, GuildChannel};
 use serenity::prelude::Context;
@@ -109,55 +107,7 @@ pub async fn run(
                                 }
                             }
                         }
-                        CommandOptionType::Attachment => {
-                            if let Some(CommandDataOptionValue::Attachment(attachment)) =
-                                op_option.resolved
-                            {
-                                interaction_reply(
-                                    command,
-                                    ctx.clone(),
-                                    format!(
-                                        "Your file ({}) is now being downloaded!!!",
-                                        attachment.filename
-                                    ),
-                                )
-                                .await?;
-                                match attachment.download().await {
-                                    Ok(data) => {
-                                        interaction_reply_edit(command, ctx.clone(), format!("Your data is currently being loaded, soon you'll be able to query your dataset!!!")).await?;
-
-                                        let db = db.clone();
-                                        let (channel, ctx, command) =
-                                            (channel.clone(), ctx.clone(), command.clone());
-                                        tokio::spawn(async move {
-                                            db.query(String::from_utf8_lossy(&data).into_owned())
-                                                .await
-                                                .unwrap();
-                                            interaction_reply_edit(
-                                                &command,
-                                                ctx,
-                                                format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL to query your data!!!", channel.id.as_u64()),
-                                            )
-                                            .await
-                                            .unwrap();
-                                        });
-                                    }
-                                    Err(why) => {
-                                        interaction_reply_edit(
-                                            command,
-                                            ctx,
-                                            format!("Error with attachment: {}", why),
-                                        )
-                                        .await?;
-                                        return Ok(());
-                                    }
-                                }
-                            } else {
-                                interaction_reply_edit(command, ctx, "Error with attachment")
-                                    .await?;
-                                return Ok(());
-                            }
-                        }
+                        CommandOptionType::Attachment => load_attachment(op_option, command, ctx, db, channel).await?,
                         _ => {
                             interaction_reply_ephemeral(command, ctx, "Unsupported option type")
                                 .await?;
@@ -167,7 +117,6 @@ pub async fn run(
                 }
                 Ordering::Less => interaction_reply(command, ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the /query command!!!\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?,
             };
-
             return Ok(());
         }
         None => {

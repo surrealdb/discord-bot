@@ -1,8 +1,9 @@
 use serenity::{
     model::{
         prelude::{
-            application_command::ApplicationCommandInteraction,
-            command::{self, Command},
+            application_command::{
+                ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
+            },
             AttachmentType, ChannelId, GuildChannel, InteractionResponseType, Message,
             PermissionOverwrite, PermissionOverwriteType,
         },
@@ -194,4 +195,60 @@ pub async fn respond(
             .unwrap();
     }
     Ok(())
+}
+
+pub async fn load_attachment(
+    op_option: CommandDataOption,
+    command: &ApplicationCommandInteraction,
+    ctx: Context,
+    db: Surreal<Db>,
+    channel: GuildChannel,
+) -> Result<(), anyhow::Error> {
+    if let Some(CommandDataOptionValue::Attachment(attachment)) = op_option.resolved {
+        interaction_reply(
+            command,
+            ctx.clone(),
+            format!(
+                "Your file ({}) is now being downloaded!!!",
+                attachment.filename
+            ),
+        )
+        .await?;
+        match attachment.download().await {
+            Ok(data) => {
+                interaction_reply_edit(command, ctx.clone(), format!("Your data is currently being loaded, soon you'll be able to query your dataset!!!")).await?;
+
+                let db = db.clone();
+                let (channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
+                tokio::spawn(async move {
+                    if let Err(why) = db.query(String::from_utf8_lossy(&data).into_owned()).await {
+                        interaction_reply_edit(
+                            &command,
+                            ctx,
+                            format!("Error importing from file, please ensure that files are valid SurrealQL: {}", why),
+                        )
+                        .await
+                        .unwrap();
+                        return;
+                    }
+                    interaction_reply_edit(
+                        &command,
+                        ctx,
+                        format!("Your data is now loaded and ready to query!!!"),
+                    )
+                    .await
+                    .unwrap();
+                });
+                Ok(())
+            }
+            Err(why) => {
+                interaction_reply_edit(command, ctx, format!("Error with attachment: {}", why))
+                    .await?;
+                Ok(())
+            }
+        }
+    } else {
+        interaction_reply_edit(command, ctx, "Error with attachment").await?;
+        Ok(())
+    }
 }

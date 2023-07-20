@@ -164,9 +164,21 @@ pub async fn run(
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
                                             channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
-                                            db.query(String::from_utf8_lossy(&data).into_owned())
+                                            if let Err(why) = db
+                                                .query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
-                                                .unwrap();
+                                            {
+                                                interaction_reply_edit(
+                                                    &command,
+                                                    ctx.clone(),
+                                                    format!("Error importing from file, please ensure that files are valid SurrealQL: {}", why),
+                                                )
+                                                .await
+                                                .ok();
+                                                channel.say(&ctx, format!("Error loading data, channel will be deleted: {why}")).await.ok();
+                                                channel.delete(ctx).await.ok();
+                                                return;
+                                            }
                                             channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with your dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
                                             interaction_reply_edit(
                                                 &command,
