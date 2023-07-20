@@ -10,6 +10,7 @@ use crate::commands;
 use crate::process;
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_ephemeral;
+use crate::utils::respond;
 use crate::DBCONNS;
 
 fn validate_msg(msg: &Message) -> bool {
@@ -32,42 +33,25 @@ impl EventHandler for Handler {
             _ => {}
         }
 
-        if let Some(conn) = DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
-            if conn.require_query {
+        let conn = match DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
+            Some(c) => {
+                c.last_used = Instant::now();
+                c.clone()
+            }
+            None => {
                 return;
             }
-            conn.last_used = Instant::now();
-            if validate_msg(&msg) {
-                let result = conn.db.query(&msg.content).await;
-                let reply = match process(conn.pretty, conn.json, result) {
-                    Ok(r) => r,
-                    Err(e) => e.to_string(),
-                };
+        };
+        if validate_msg(&msg) {
+            let result = conn.db.query(&msg.content).await;
+            let reply = match process(conn.pretty, conn.json, result) {
+                Ok(r) => r,
+                Err(e) => e.to_string(),
+            };
 
-                if reply.len() < 1900 {
-                    msg.reply(
-                        &ctx,
-                        format!(
-                            "```{}\n{}\n```",
-                            if conn.json { "json" } else { "sql" },
-                            reply
-                        ),
-                    )
-                    .await
-                    .unwrap();
-                } else {
-                    let reply_attachment = AttachmentType::Bytes {
-                        data: std::borrow::Cow::Borrowed(reply.as_bytes()),
-                        filename: format!("response.{}", if conn.json { "json" } else { "sql" }),
-                    };
-                    msg.channel_id
-                        .send_message(&ctx, |m| {
-                            m.reference_message(&msg).add_file(reply_attachment)
-                        })
-                        .await
-                        .unwrap();
-                }
-            }
+            respond(reply, ctx, msg.clone(), &conn, msg.channel_id)
+                .await
+                .unwrap();
         }
     }
 

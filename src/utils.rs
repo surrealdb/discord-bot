@@ -1,8 +1,10 @@
 use serenity::{
     model::{
         prelude::{
-            application_command::ApplicationCommandInteraction, GuildChannel,
-            InteractionResponseType, PermissionOverwrite, PermissionOverwriteType,
+            application_command::ApplicationCommandInteraction,
+            command::{self, Command},
+            AttachmentType, ChannelId, GuildChannel, InteractionResponseType, Message,
+            PermissionOverwrite, PermissionOverwriteType,
         },
         Permissions,
     },
@@ -11,7 +13,7 @@ use serenity::{
 use surrealdb::{engine::local::Db, Surreal};
 use tokio::time::{sleep_until, Instant};
 
-use crate::{config::Config, db_utils::get_config, ConnType, DBCONNS};
+use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
 
 pub async fn interaction_reply(
     command: &ApplicationCommandInteraction,
@@ -157,5 +159,39 @@ pub async fn register_db(
             sleep_until(last_time + ttl).await;
         }
     });
+    Ok(())
+}
+
+pub async fn respond(
+    reply: String,
+    ctx: Context,
+    query_msg: Message,
+    conn: &Conn,
+    channel_id: ChannelId,
+) -> Result<(), anyhow::Error> {
+    if reply.len() < 1900 {
+        query_msg
+            .reply(
+                &ctx,
+                format!(
+                    "```{}\n{}\n```",
+                    if conn.json { "json" } else { "sql" },
+                    reply
+                ),
+            )
+            .await
+            .unwrap();
+    } else {
+        let reply_attachment = AttachmentType::Bytes {
+            data: std::borrow::Cow::Borrowed(reply.as_bytes()),
+            filename: format!("response.{}", if conn.json { "json" } else { "sql" }),
+        };
+        channel_id
+            .send_message(&ctx, |m| {
+                m.reference_message(&query_msg).add_file(reply_attachment)
+            })
+            .await
+            .unwrap();
+    }
     Ok(())
 }
