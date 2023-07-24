@@ -36,6 +36,9 @@ impl EventHandler for Handler {
         let conn = match DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
             Some(c) => {
                 c.last_used = Instant::now();
+                if c.require_query {
+                    return;
+                }
                 c.clone()
             }
             None => {
@@ -89,6 +92,7 @@ impl EventHandler for Handler {
                 "query" => commands::query::run(&command, ctx.clone()).await,
                 "q" => commands::q::run(&command, ctx.clone()).await,
                 "connect" => commands::connect::run(&command, ctx.clone()).await,
+                "export" => commands::export::run(&command, ctx.clone()).await,
                 _ => {
                     interaction_reply(
                         &command,
@@ -100,8 +104,12 @@ impl EventHandler for Handler {
             };
 
             if let Err(why) = res {
+                command
+                    .delete_original_interaction_response(&ctx)
+                    .await
+                    .ok();
                 println!("Cannot respond to slash command: {}", why);
-                interaction_reply_ephemeral(&command, ctx, why)
+                interaction_reply_ephemeral(&command, ctx, format!("Error processing commang"))
                     .await
                     .unwrap();
             }

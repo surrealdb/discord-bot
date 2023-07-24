@@ -219,7 +219,7 @@ pub async fn load_attachment(
                 interaction_reply_edit(command, ctx.clone(), format!("Your data is currently being loaded, soon you'll be able to query your dataset!!!")).await?;
 
                 let db = db.clone();
-                let (channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
+                let (_channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
                 tokio::spawn(async move {
                     if let Err(why) = db.query(String::from_utf8_lossy(&data).into_owned()).await {
                         interaction_reply_edit(

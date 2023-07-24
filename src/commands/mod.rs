@@ -6,6 +6,7 @@ pub mod configure_channel;
 pub mod connect;
 pub mod create;
 pub mod create_db_thread;
+pub mod export;
 pub mod load;
 pub mod q;
 pub mod query;
@@ -27,4 +28,5 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| query::register(command))
         .create_application_command(|command| q::register(command))
         .create_application_command(|command| connect::register(command))
+        .create_application_command(|command| export::register(command))
 }
