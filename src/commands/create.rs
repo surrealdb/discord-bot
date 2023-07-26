@@ -10,8 +10,6 @@ use serenity::model::prelude::{AttachmentType, Guild, PermissionOverwrite, UserI
 use serenity::model::Permissions;
 use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
-use surrealdb::engine::local::Mem;
-use surrealdb::Surreal;
 
 use crate::{premade, utils::*};
 
@@ -81,8 +79,7 @@ pub async fn run(
                 })
                 .await
                 .unwrap();
-            let db = Surreal::new::<Mem>(()).await?;
-            db.use_ns("test").use_db("test").await?;
+            let db = create_db_instance(&config).await?;
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {

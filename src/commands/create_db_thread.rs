@@ -3,8 +3,6 @@ use serenity::model::prelude::application_command::ApplicationCommandInteraction
 
 use memorable_wordlist::kebab_case;
 use serenity::prelude::Context;
-use surrealdb::engine::local::Mem;
-use surrealdb::Surreal;
 
 use crate::utils::*;
 
@@ -40,8 +38,7 @@ pub async fn run(
                 .create_public_thread(&ctx, message, |t| t.name(kebab_case(40)))
                 .await?;
 
-            let db = Surreal::new::<Mem>(()).await.unwrap();
-            db.use_ns("test").use_db("test").await.unwrap();
+            let db = create_db_instance(&config).await?;
 
             channel.say(&ctx, format!("This public thread is now connected to a SurrealDB instance, try writing some SurrealQL!!!\nuse /load to load a premade dataset or your own SurrealQL\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
             interaction_reply_ephemeral(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;

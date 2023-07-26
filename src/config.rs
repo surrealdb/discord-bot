@@ -14,6 +14,7 @@ pub struct Config {
     pub active_channel: ChannelId,
     pub archive_channel: ChannelId,
     pub ttl: Duration,
+    pub timeout: Duration,
     pub pretty: bool,
     pub json: bool,
 }
@@ -30,6 +31,9 @@ impl Config {
         if let Some(ttl) = to_add.ttl {
             self.ttl = ttl;
         }
+        if let Some(timeout) = to_add.timeout {
+            self.timeout = timeout;
+        }
         if let Some(pretty) = to_add.pretty {
             self.pretty = pretty;
         }
@@ -44,6 +48,7 @@ impl Config {
             active_channel: builder.active_channel?,
             archive_channel: builder.archive_channel?,
             ttl: builder.ttl?,
+            timeout: builder.timeout?,
             pretty: builder.pretty?,
             json: builder.json?,
         })
@@ -56,6 +61,7 @@ pub struct ConfigBuilder {
     pub active_channel: Option<ChannelId>,
     pub archive_channel: Option<ChannelId>,
     pub ttl: Option<Duration>,
+    pub timeout: Option<Duration>,
     pub pretty: Option<bool>,
     pub json: Option<bool>,
 }
@@ -83,6 +89,11 @@ impl ConfigBuilder {
                         option.value.clone().unwrap().as_u64().unwrap(),
                     ))
                 }
+                "timeout" => {
+                    acc.timeout = Some(Duration::from_secs(
+                        option.value.clone().unwrap().as_u64().unwrap(),
+                    ))
+                }
                 "pretty" => acc.pretty = Some(option.value.clone().unwrap().as_bool().unwrap()),
                 "json" => acc.json = Some(option.value.clone().unwrap().as_bool().unwrap()),
                 _ => {}
@@ -98,6 +109,7 @@ impl ConfigBuilder {
             active_channel: None,
             archive_channel: None,
             ttl: None,
+            timeout: None,
             pretty: None,
             json: None,
         }
@@ -129,6 +141,13 @@ pub fn register_options(
             option
                 .name("ttl")
                 .description("The default time to live for created channels in seconds")
+                .kind(CommandOptionType::Integer)
+                .required(req)
+        })
+        .create_option(|option| {
+            option
+                .name("timeout")
+                .description("The timeout for queries and transactions")
                 .kind(CommandOptionType::Integer)
                 .required(req)
         })

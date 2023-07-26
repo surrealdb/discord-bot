@@ -1,15 +1,11 @@
 use std::path::Path;
 
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
-use serenity::model::prelude::*;
-use serenity::model::Permissions;
 
 use serenity::builder::CreateApplicationCommand;
-use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 use tokio::fs;
 
-use crate::utils::interaction_followup;
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_edit;
 use crate::utils::interaction_reply_ephemeral;

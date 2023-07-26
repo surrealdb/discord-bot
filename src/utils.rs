@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serenity::{
     model::{
         prelude::{
@@ -11,8 +13,14 @@ use serenity::{
     },
     prelude::Context,
 };
-use surrealdb::{engine::local::Db, Surreal};
-use tokio::time::{sleep_until, Instant};
+use surrealdb::{
+    engine::local::{Db, Mem},
+    Surreal,
+};
+use tokio::{
+    fs,
+    time::{sleep_until, Instant},
+};
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
 
@@ -87,6 +95,34 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             )
             .await
             .ok();
+        'export: {
+            let conn = match DBCONNS.lock().await.get_mut(channel.id.as_u64()) {
+                Some(c) => {
+                    c.last_used = Instant::now();
+                    c.clone()
+                }
+                None => {
+                    break 'export;
+                }
+            };
+
+            fs::create_dir("tmp").await.ok();
+            let path = format!("tmp/{}.surql", channel.id.as_u64());
+
+            match conn.db.export(&path).await {
+                Ok(_) => {
+                    channel
+                        .send_message(&ctx, |m| {
+                            m.content("Database exported:").add_file(Path::new(&path))
+                        })
+                        .await
+                        .ok();
+
+                    fs::remove_file(path).await.ok();
+                }
+                Err(_) => {}
+            };
+        }
 
         DBCONNS.lock().await.remove(channel.id.as_u64());
     }
@@ -251,4 +287,15 @@ pub async fn load_attachment(
         interaction_reply_edit(command, ctx, "Error with attachment").await?;
         Ok(())
     }
+}
+
+pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, anyhow::Error> {
+    let db_config = surrealdb::opt::Config::new()
+        .query_timeout(server_config.timeout)
+        .transaction_timeout(server_config.timeout);
+    let db = Surreal::new::<Mem>(db_config).await?;
+
+    db.use_ns("test").use_db("test").await?;
+
+    Ok(db)
 }
