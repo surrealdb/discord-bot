@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{cmp::Ordering, path::Path};
 
 use serenity::{
     model::{
@@ -23,6 +23,8 @@ use tokio::{
 };
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
+
+const MAX_FILE_SIZE: usize = 24_000_000;
 
 pub async fn interaction_reply(
     command: &ApplicationCommandInteraction,
@@ -219,13 +221,26 @@ pub async fn respond(
             .await
             .unwrap();
     } else {
+        let mut truncated = false;
+        let data = match reply.as_bytes().len().cmp(&MAX_FILE_SIZE) {
+            Ordering::Equal | Ordering::Less => reply.as_bytes(),
+            Ordering::Greater => {
+                truncated = true;
+                reply.as_bytes().split_at(MAX_FILE_SIZE).0
+            }
+        };
         let reply_attachment = AttachmentType::Bytes {
-            data: std::borrow::Cow::Borrowed(reply.as_bytes()),
+            data: std::borrow::Cow::Borrowed(data),
             filename: format!("response.{}", if conn.json { "json" } else { "sql" }),
         };
         channel_id
             .send_message(&ctx, |m| {
-                m.reference_message(&query_msg).add_file(reply_attachment)
+                let message = m.reference_message(&query_msg).add_file(reply_attachment);
+                if truncated {
+                    message.content("Response was too long and has been truncated")
+                } else {
+                    message
+                }
             })
             .await
             .unwrap();
