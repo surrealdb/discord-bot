@@ -6,7 +6,7 @@ use serenity::model::prelude::application_command::ApplicationCommandInteraction
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::{AttachmentType, GuildChannel};
 use serenity::prelude::Context;
-use surrealdb::engine::local::{Db, Mem};
+use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
 use crate::{premade, utils::*, DBCONNS};
@@ -49,8 +49,7 @@ pub async fn run(
 
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
 
-            let db = Surreal::new::<Mem>(()).await?;
-            db.use_ns("test").use_db("test").await?;
+            let db = create_db_instance(&config).await?;
 
             register_db(
                 ctx.clone(),

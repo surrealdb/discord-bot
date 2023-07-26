@@ -1,9 +1,7 @@
 use std::cmp::Ordering;
 use std::path::Path;
 
-use serenity::model::prelude::application_command::{
-    ApplicationCommandInteraction, CommandDataOptionValue,
-};
+use serenity::model::prelude::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::model::prelude::{AttachmentType, GuildChannel};
 

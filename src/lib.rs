@@ -10,11 +10,10 @@ use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use surrealdb::Error;
 use surrealdb::{sql::Value, Response};
+use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 
 use std::collections::HashMap;
-
-use serenity::prelude::*;
 
 use once_cell::sync::Lazy;
 use surrealdb::engine::local::Db;
