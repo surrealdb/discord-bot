@@ -1,6 +1,6 @@
 [package]
 name = "surreal_bot"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Raphael Darley <raphael.darley@surrealdb.com>"]
 
@@ -19,5 +19,6 @@ serenity = { default-features = false, features = [
 ], version = "0.11.6" }
 surrealdb = { git = "https://github.com/surrealdb/surrealdb.git", features = [
     "kv-mem",
+    "kv-rocksdb",
 ] }
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }

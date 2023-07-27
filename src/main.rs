@@ -3,18 +3,28 @@ use serenity::prelude::*;
 
 use dotenv::dotenv;
 use std::env;
+use std::path::Path;
 
-use surrealdb::engine::local::Mem;
+use surrealdb::engine::local::{Mem, RocksDb};
 
 use surreal_bot::handler::Handler;
 use surreal_bot::DB;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    DB.connect::<Mem>(()).await?;
+    dotenv().ok();
+
+    match env::var("CONFIG_DB_PATH") {
+        Ok(path) => {
+            let path = Path::new(&path);
+            DB.connect::<RocksDb>(path).await?;
+        }
+        Err(_) => {
+            DB.connect::<Mem>(()).await?;
+        }
+    }
     DB.use_ns("SurrealBot").use_db("SurrealBot").await?;
 
-    dotenv().ok();
     let token = env::var("DISCORD_TOKEN")?;
 
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
