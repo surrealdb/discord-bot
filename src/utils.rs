@@ -113,12 +113,18 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
 
             match conn.db.export(&path).await {
                 Ok(_) => {
-                    channel
-                        .send_message(&ctx, |m| {
-                            m.content("Database exported:").add_file(Path::new(&path))
-                        })
-                        .await
-                        .ok();
+                    if let Ok(metadata) = fs::metadata(&path).await {
+                        if metadata.len() < MAX_FILE_SIZE as u64 {
+                            channel
+                                .send_message(&ctx, |m| {
+                                    m.content("Database exported:").add_file(Path::new(&path))
+                                })
+                                .await
+                                .ok();
+                        } else {
+                            channel.send_message(&ctx, |m| m.content("Your database is too powerful, (the export is too large to send)")).await.ok();
+                        }
+                    }
 
                     fs::remove_file(path).await.ok();
                 }

@@ -36,9 +36,11 @@ pub async fn run(
             return Ok(());
         }
     };
+    interaction_reply_ephemeral(command, ctx.clone(), "This channel should now be cleaned").await?;
+
     clean_channel(channel, &ctx).await;
 
-    interaction_reply_ephemeral(command, ctx, "This channel should now be cleaned").await
+    Ok(())
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
