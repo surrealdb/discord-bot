@@ -60,8 +60,6 @@ impl EventHandler for Handler {
 
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
-        ctx.set_activity(Activity::playing("Making cool things with SurrealDB"))
-            .await;
 
         for guild in ready.guilds {
             let commands =

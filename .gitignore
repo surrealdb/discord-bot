@@ -3,3 +3,4 @@ secrets.toml
 config.toml
 database.db
 .env
+config.db
