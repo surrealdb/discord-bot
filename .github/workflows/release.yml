@@ -13,6 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Setup cache
+      uses: Swatinem/rust-cache@v2
     - name: Build crate
       run: cargo build --release --verbose
     - name: Build the Docker image
