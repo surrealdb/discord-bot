@@ -24,7 +24,7 @@ use tokio::{
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
 
-const MAX_FILE_SIZE: usize = 24_000_000;
+pub const MAX_FILE_SIZE: usize = 24_000_000;
 
 pub async fn interaction_reply(
     command: &ApplicationCommandInteraction,
@@ -89,7 +89,9 @@ pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
 }
 
 pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
-    if DBCONNS.lock().await.contains_key(channel.id.as_u64()) {
+    let entry = DBCONNS.lock().await.remove(channel.id.as_u64());
+
+    if let Some(conn) = entry {
         channel
             .say(
                 &ctx,
@@ -97,42 +99,36 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             )
             .await
             .ok();
-        'export: {
-            let conn = match DBCONNS.lock().await.get_mut(channel.id.as_u64()) {
-                Some(c) => {
-                    c.last_used = Instant::now();
-                    c.clone()
-                }
-                None => {
-                    break 'export;
-                }
-            };
 
-            fs::create_dir("tmp").await.ok();
-            let path = format!("tmp/{}.surql", channel.id.as_u64());
+        fs::create_dir("tmp").await.ok();
+        let path = format!("tmp/{}.surql", channel.id.as_u64());
 
-            match conn.db.export(&path).await {
-                Ok(_) => {
-                    if let Ok(metadata) = fs::metadata(&path).await {
-                        if metadata.len() < MAX_FILE_SIZE as u64 {
-                            channel
-                                .send_message(&ctx, |m| {
-                                    m.content("Database exported:").add_file(Path::new(&path))
-                                })
-                                .await
-                                .ok();
-                        } else {
-                            channel.send_message(&ctx, |m| m.content("Your database is too powerful, (the export is too large to send)")).await.ok();
-                        }
+        match conn.db.export(&path).await {
+            Ok(_) => {
+                if let Ok(metadata) = fs::metadata(&path).await {
+                    if metadata.len() < MAX_FILE_SIZE as u64 {
+                        channel
+                            .send_message(&ctx, |m| {
+                                m.content("Database exported:").add_file(Path::new(&path))
+                            })
+                            .await
+                            .ok();
+                    } else {
+                        channel.send_message(&ctx, |m| m.content("Your database is too powerful, (the export is too large to send)")).await.ok();
                     }
-
-                    fs::remove_file(path).await.ok();
                 }
-                Err(_) => {}
-            };
-        }
 
-        DBCONNS.lock().await.remove(channel.id.as_u64());
+                fs::remove_file(path).await.ok();
+            }
+            Err(why) => {
+                channel
+                    .send_message(&ctx, |m| {
+                        m.content(format!("Database export failed: {why}"))
+                    })
+                    .await
+                    .ok();
+            }
+        };
     }
 
     let result = get_config(channel.guild_id).await;

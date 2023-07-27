@@ -6,6 +6,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 use tokio::fs;
 
+use crate::utils;
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_edit;
 use crate::utils::interaction_reply_ephemeral;
@@ -36,13 +37,31 @@ pub async fn run(
 
     match conn.db.export(&path).await {
         Ok(_) => {
-            command
-                .create_followup_message(ctx, |message| {
-                    message
-                        .content("Database exported:")
-                        .add_file(Path::new(&path))
-                })
-                .await?;
+            match fs::metadata(&path).await {
+                Ok(metadata) => {
+                    if metadata.len() < utils::MAX_FILE_SIZE as u64 {
+                        command
+                            .create_followup_message(ctx, |message| {
+                                message
+                                    .content("Database exported:")
+                                    .add_file(Path::new(&path))
+                            })
+                            .await?;
+                    } else {
+                        interaction_reply_edit(
+                            command,
+                            ctx,
+                            "Your database is too powerful, (the export is too large to send)",
+                        )
+                        .await?;
+                    }
+                }
+                Err(_) => {
+                    command
+                        .create_followup_message(&ctx, |m| m.content("Error in export process"))
+                        .await?;
+                }
+            }
 
             fs::remove_file(path).await?;
         }
