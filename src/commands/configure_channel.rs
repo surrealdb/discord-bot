@@ -4,7 +4,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
-use crate::utils::interaction_reply_ephemeral;
+use crate::utils::{interaction_reply, interaction_reply_ephemeral};
 use crate::DBCONNS;
 
 pub async fn run(
@@ -24,7 +24,7 @@ pub async fn run(
                 _ => {}
             }
         }
-        interaction_reply_ephemeral(
+        interaction_reply(
             command,
             ctx,
             format!(
