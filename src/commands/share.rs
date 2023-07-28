@@ -20,7 +20,7 @@ pub async fn run(
         interaction_reply_ephemeral(
             command,
             ctx,
-            "Please use the /share command from an active SurrealQL channel",
+            ":information_source: Please use the `/share` command from an active SurrealQL channel",
         )
         .await?;
         return Ok(());
@@ -55,7 +55,7 @@ pub async fn run(
         command,
         ctx,
         format!(
-            "<@{}> can now view this channel and write SurrealQL",
+            ":white_check_mark: <@{}> can now view this channel and write SurrealQL",
             user_id
         ),
     )
@@ -68,7 +68,7 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("share")
-        .description("Share a channel with another user")
+        .description("Share a SurrealQL channel with another user")
         .create_option(|option| {
             option
                 .name("user")

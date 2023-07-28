@@ -22,7 +22,7 @@ pub async fn run(
         interaction_reply_ephemeral(
             command,
             ctx,
-            "There is no database instance currently associated with this channel",
+            ":warning: There is no database instance currently associated with this channel",
         )
         .await?;
         return Ok(());
@@ -31,12 +31,12 @@ pub async fn run(
     let channel = match command.channel_id.to_channel(&ctx).await.unwrap() {
         Channel::Guild(c) => c,
         _ => {
-            interaction_reply_ephemeral(command, ctx, "Command only works in guild channels")
+            interaction_reply_ephemeral(command, ctx, ":warning: This command only works in guild channels")
                 .await?;
             return Ok(());
         }
     };
-    interaction_reply_ephemeral(command, ctx.clone(), "This channel should now be cleaned").await?;
+    interaction_reply_ephemeral(command, ctx.clone(), ":white_check_mark: This channel should now be cleaned").await?;
 
     clean_channel(channel, &ctx).await;
 
@@ -46,6 +46,6 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("clean")
-        .description("cleans the current channel!")
+        .description("Cleans the current channel!")
         .default_member_permissions(Permissions::MANAGE_CHANNELS)
 }

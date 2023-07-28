@@ -95,7 +95,7 @@ impl EventHandler for Handler {
                     interaction_reply(
                         &command,
                         ctx.clone(),
-                        "Command is currently not implemented".to_string(),
+                        ":warning: Command is currently not implemented".to_string(),
                     )
                     .await
                 }
@@ -107,7 +107,7 @@ impl EventHandler for Handler {
                     .await
                     .ok();
                 println!("Cannot respond to slash command: {}", why);
-                interaction_reply_ephemeral(&command, ctx, format!("Error processing commang"))
+                interaction_reply_ephemeral(&command, ctx, format!(":x: Error processing commang"))
                     .await
                     .unwrap();
             }
