@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, path::Path};
+use std::{cmp::Ordering, env, path::Path};
 
 use serenity::{
     model::{
@@ -100,8 +100,14 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             .await
             .ok();
 
-        fs::create_dir("tmp").await.ok();
-        let path = format!("tmp/{}.surql", channel.id.as_u64());
+        let base_path = match env::var("TEMP_DIR_PATH") {
+            Ok(p) => p,
+            Err(_) => {
+                fs::create_dir("tmp").await.ok();
+                "tmp/".to_string()
+            }
+        };
+        let path = format!("{base_path}{}.surql", channel.id.as_u64());
 
         match conn.db.export(&path).await {
             Ok(_) => {

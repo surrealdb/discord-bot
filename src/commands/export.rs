@@ -1,3 +1,4 @@
+use std::env;
 use std::path::Path;
 
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
@@ -32,8 +33,14 @@ pub async fn run(
     };
     interaction_reply(command, ctx.clone(), "Exporting database").await?;
 
-    fs::create_dir("tmp").await.ok();
-    let path = format!("tmp/{}.surql", command.id.as_u64());
+    let base_path = match env::var("TEMP_DIR_PATH") {
+        Ok(p) => p,
+        Err(_) => {
+            fs::create_dir("tmp").await.ok();
+            "tmp/".to_string()
+        }
+    };
+    let path = format!("{base_path}{}.surql", command.id.as_u64());
 
     match conn.db.export(&path).await {
         Ok(_) => {
