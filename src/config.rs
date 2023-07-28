@@ -124,7 +124,7 @@ pub fn register_options(
         .create_option(|option| {
             option
                 .name("active")
-                .description("channel category for current database instances")
+                .description("Channel category for current database instances")
                 .kind(CommandOptionType::Channel)
                 .channel_types(&[ChannelType::Category])
                 .required(req)
@@ -132,7 +132,7 @@ pub fn register_options(
         .create_option(|option| {
             option
                 .name("archive")
-                .description("channel category for archived database instances")
+                .description("Channel category for archived database instances")
                 .kind(CommandOptionType::Channel)
                 .channel_types(&[ChannelType::Category])
                 .required(req)
@@ -154,14 +154,14 @@ pub fn register_options(
         .create_option(|option| {
             option
                 .name("pretty")
-                .description("whether or not to pretty print responses")
+                .description("Whether or not to pretty print responses")
                 .kind(CommandOptionType::Boolean)
                 .required(req)
         })
         .create_option(|option| {
             option
                 .name("json")
-                .description("whether to format output as JSON, the alternative is SurrealQL")
+                .description("Whether to format output as JSON, the alternative is SurrealQL")
                 .kind(CommandOptionType::Boolean)
                 .default_option(false)
                 .required(req)

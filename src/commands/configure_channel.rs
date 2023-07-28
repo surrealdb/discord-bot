@@ -28,7 +28,7 @@ pub async fn run(
             command,
             ctx,
             format!(
-                "This channel is now configured with pretty printing:{}, json:{}, require_query: {}",
+                ":information_source: **This channel's configuration was updated** \nPretty printing: `{}` \nJSON: `{}` \nRequire query: `{}`",
                 conn.pretty, conn.json, conn.require_query
             ),
         )
@@ -37,7 +37,7 @@ pub async fn run(
         interaction_reply_ephemeral(
             command,
             ctx,
-            "There is no database instance currently associated with this channel",
+            ":warning: There is no database instance currently associated with this channel",
         )
         .await?;
     }
@@ -48,18 +48,18 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("configure_channel")
-        .description("Update configuration options on a channel for SurrealBot")
+        .description("Update configuration options on this channel for SurrealBot")
         .create_option(|option| {
             option
                 .name("pretty")
-                .description("whether or not to pretty print responses")
+                .description("Whether or not to pretty print responses")
                 .kind(CommandOptionType::Boolean)
                 .required(false)
         })
         .create_option(|option| {
             option
                 .name("json")
-                .description("whether to format output as JSON, the alternative is SurrealQL")
+                .description("Whether to format output as JSON, the alternative is SurrealQL")
                 .kind(CommandOptionType::Boolean)
                 .default_option(false)
                 .required(false)
@@ -67,7 +67,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         .create_option(|option| {
             option
                 .name("require_query")
-                .description("whether the /query command is requred to contact the database")
+                .description("Whether the /query command is required to send queries to SurrealDB")
                 .kind(CommandOptionType::Boolean)
                 .default_option(false)
                 .required(false)

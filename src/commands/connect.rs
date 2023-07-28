@@ -27,7 +27,7 @@ pub async fn run(
         interaction_reply_ephemeral(
             command,
             ctx,
-            "This channel already has an associated database instance",
+            ":information_source: This channel already has an associated database instance",
         )
         .await?;
         return Ok(());
@@ -41,10 +41,10 @@ pub async fn run(
                 Ok(response) => {
                     match response {
                         Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
+                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot!".to_string()).await
                     }
                 }
-                Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
+                Err(e) => return interaction_reply_ephemeral(command, ctx, format!(":x: Database error: {}", e)).await,
             };
 
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
@@ -63,7 +63,7 @@ pub async fn run(
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
                     return Ok(());
                 }
                 Ordering::Equal => {
@@ -78,7 +78,7 @@ pub async fn run(
                                         channel,
                                         command,
                                         "surreal_deal_mini.surql",
-                                        "surreal deal(mini)",
+                                        "Surreal deal (mini)",
                                         Some("surreal_deal.png"),
                                     )
                                     .await?;
@@ -90,7 +90,7 @@ pub async fn run(
                                         channel,
                                         command,
                                         "surreal_deal.surql",
-                                        "surreal deal",
+                                        "Surreal deal",
                                         Some("surreal_deal.png"),
                                     )
                                     .await?;
@@ -108,13 +108,13 @@ pub async fn run(
                         }
                         CommandOptionType::Attachment => load_attachment(op_option, command, ctx, db, channel).await?,
                         _ => {
-                            interaction_reply_ephemeral(command, ctx, "Unsupported option type")
+                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
                                 .await?;
                             return Ok(());
                         }
                     }
                 }
-                Ordering::Less => interaction_reply(command, ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the /query command!!!\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?,
+                Ordering::Less => interaction_reply(command, ctx, format!(":information_source: This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the `/query` command! \n_Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await?,
             };
             return Ok(());
         }
@@ -122,7 +122,7 @@ pub async fn run(
             return interaction_reply(
                 command,
                 ctx,
-                "Direct messages are not currently supported".to_string(),
+                ":warning: Direct messages are not currently supported".to_string(),
             )
             .await;
         }
@@ -137,7 +137,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         .create_option(|option| {
             option
                 .name("file")
-                .description("a SurrealQL to load into the database instance")
+                .description("A SurrealQL file to load into the database instance")
                 .kind(CommandOptionType::Attachment)
                 .required(false)
         })
@@ -157,7 +157,7 @@ async fn load_premade(
             command,
             ctx.clone(),
             format!(
-                "Data is currently being loaded, soon you'll be able to query the {} dataset!!!",
+                ":information_source: The dataset is currently being loaded, soon you'll be able to query the {} dataset! \n_Please wait for a confirmation that the dataset is loaded!_",
                 name
             ),
         )
@@ -171,7 +171,7 @@ async fn load_premade(
                         &command,
                         ctx.clone(),
                         format!(
-                            "Data is now loaded and you can query the {} dataset with the /query command!!!",
+                            ":white_check_mark: The dataset is now loaded and you can query the {} dataset with the `/query` command!",
                             name
                         ),
                     )
@@ -192,7 +192,7 @@ async fn load_premade(
                     }
                 }
                 Err(why) => {
-                    interaction_reply_edit(&command, ctx, format!("Error loading data: {}", why))
+                    interaction_reply_edit(&command, ctx, format!(":x: Error loading data: {}", why))
                         .await
                         .unwrap();
                 }

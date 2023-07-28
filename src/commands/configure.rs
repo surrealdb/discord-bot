@@ -24,7 +24,7 @@ pub async fn run(
 
     match result {
         Ok(response) => match response {
-            Some(c) => return interaction_reply(command, ctx.clone(), format!("This server is already configured with: {:?}\n Try using /configUpdate to change the config", c)).await,
+            Some(c) => return interaction_reply(command, ctx.clone(), format!(":warning: This server is already configured with: {:?}\n Try using `/config_update` to change the config", c)).await,
 
             None => {}
         },
@@ -40,7 +40,7 @@ pub async fn run(
             return interaction_reply_ephemeral(
                 command,
                 ctx,
-                "Error building config, please ensure all fields are present",
+                ":x: Error building config, please ensure all fields are present!",
             )
             .await;
         }
@@ -57,12 +57,12 @@ pub async fn run(
     let msg = match created {
         Ok(response) => match response {
             Some(c) => {
-                format!("This server is now configured with: {:?}", c)
+                format!(":information_source: This server is now configured with: {:?}", c)
             }
 
-            None => "Error adding configuration".to_string(),
+            None => ":x: Error adding configuration".to_string(),
         },
-        Err(e) => format!("Database error: {}", e),
+        Err(e) => format!(":x: Database error: {}", e),
     };
     interaction_reply(command, ctx.clone(), msg).await
 }

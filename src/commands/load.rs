@@ -26,7 +26,7 @@ pub async fn run(
         interaction_reply_ephemeral(
             command,
             ctx,
-            "Please select premade dataset or supply SurrealQL file to load",
+            ":information_source: Please select a premade dataset or supply a SurrealQL file to load",
         )
         .await?;
         return Ok(());
@@ -50,7 +50,7 @@ pub async fn run(
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one argument (you can use the up arrow to edit the previous command)").await?;
                     return Ok(());
                 }
                 Ordering::Equal => {
@@ -65,7 +65,7 @@ pub async fn run(
                                         channel,
                                         command,
                                         "surreal_deal_mini.surql",
-                                        "surreal deal(mini)",
+                                        "Surreal deal (mini)",
                                         Some("surreal_deal.png"),
                                     )
                                     .await?;
@@ -77,7 +77,7 @@ pub async fn run(
                                         channel,
                                         command,
                                         "surreal_deal.surql",
-                                        "surreal deal",
+                                        "Surreal deal",
                                         Some("surreal_deal.png"),
                                     )
                                     .await?;
@@ -98,7 +98,7 @@ pub async fn run(
                             load_attachment(op_option, command, ctx, db, channel).await?
                         }
                         _ => {
-                            interaction_reply_ephemeral(command, ctx, "Unsupported option type")
+                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
                                 .await?;
                             return Ok(());
                         }
@@ -113,7 +113,7 @@ pub async fn run(
             return interaction_reply(
                 command,
                 ctx,
-                "Direct messages are not currently supported".to_string(),
+                ":warning: Direct messages are not currently supported".to_string(),
             )
             .await;
         }
@@ -128,7 +128,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         .create_option(|option| {
             option
                 .name("file")
-                .description("a SurrealQL to load into the database instance")
+                .description("A SurrealQL file to load into the database instance")
                 .kind(CommandOptionType::Attachment)
                 .required(false)
         })
@@ -148,7 +148,7 @@ async fn load_premade(
             command,
             ctx.clone(),
             format!(
-                "Data is currently being loaded, soon you'll be able to query the {} dataset!!!",
+                ":information_source: The dataset is currently being loaded, soon you'll be able to query the {} dataset! \n_Please wait for a confirmation that the dataset is loaded!_",
                 name
             ),
         )
@@ -162,7 +162,7 @@ async fn load_premade(
                         &command,
                         ctx.clone(),
                         format!(
-                            "Data is now loaded and you can query the {} dataset!!!",
+                            ":white_check_mark: The dataset is now loaded and you can query the {} dataset!",
                             name
                         ),
                     )
@@ -183,7 +183,7 @@ async fn load_premade(
                     }
                 }
                 Err(why) => {
-                    interaction_reply_edit(&command, ctx, format!("Error loading data: {}", why))
+                    interaction_reply_edit(&command, ctx, format!(":x: Error loading data: {}", why))
                         .await
                         .unwrap();
                 }
