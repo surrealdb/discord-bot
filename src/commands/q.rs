@@ -16,11 +16,11 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("q")
-        .description("alias for query")
+        .description("Alias for /query")
         .create_option(|option| {
             option
                 .name("query")
-                .description("query string to send to the database instance")
+                .description("Query string to send to SurrealDB")
                 .kind(CommandOptionType::String)
                 .required(true)
         })

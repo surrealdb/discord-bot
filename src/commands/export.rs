@@ -25,13 +25,13 @@ pub async fn run(
             interaction_reply_ephemeral(
                 command,
                 ctx,
-                "No database instance found for this channel",
+                ":x: No database instance found for this channel",
             )
             .await?;
             return Ok(());
         }
     };
-    interaction_reply(command, ctx.clone(), "Exporting database").await?;
+    interaction_reply(command, ctx.clone(), ":information_source: Exporting database").await?;
 
     let base_path = match env::var("TEMP_DIR_PATH") {
         Ok(p) => p,
@@ -50,7 +50,7 @@ pub async fn run(
                         command
                             .create_followup_message(ctx, |message| {
                                 message
-                                    .content("Database exported:")
+                                    .content(":white_check_mark: Database exported:")
                                     .add_file(Path::new(&path))
                             })
                             .await?;
@@ -58,14 +58,14 @@ pub async fn run(
                         interaction_reply_edit(
                             command,
                             ctx,
-                            "Your database is too powerful, (the export is too large to send)",
+                            ":x: Your database is too powerful, (the export is too large to send)",
                         )
                         .await?;
                     }
                 }
                 Err(_) => {
                     command
-                        .create_followup_message(&ctx, |m| m.content("Error in export process"))
+                        .create_followup_message(&ctx, |m| m.content(":x: Error in export process"))
                         .await?;
                 }
             }
@@ -73,7 +73,7 @@ pub async fn run(
             fs::remove_file(path).await?;
         }
         Err(why) => {
-            interaction_reply_edit(command, ctx, format!("Database export failed: {why}")).await?
+            interaction_reply_edit(command, ctx, format!(":x: Database export failed: {why}")).await?
         }
     };
     Ok(())

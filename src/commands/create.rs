@@ -30,10 +30,10 @@ pub async fn run(
                 Ok(response) => {
                     match response {
                         Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
+                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot".to_string()).await
                     }
                 }
-                Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
+                Err(e) => return interaction_reply_ephemeral(command, ctx, format!(":x: Database error: {}", e)).await,
             };
 
             println!("options array length:{:?}", command.data.options.len());
@@ -83,7 +83,7 @@ pub async fn run(
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, "Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one argument (you can use the up arrow to edit the previous command)").await?;
                     return Ok(());
                 }
                 Ordering::Equal => {
@@ -92,14 +92,14 @@ pub async fn run(
                         CommandOptionType::String => {
                             match op_option.value.unwrap().as_str().unwrap() {
                                 "surreal_deal_mini" => {
-                                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal(mini) dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal (mini) dataset.", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
-                                        channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal(mini) dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                        channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with the Surreal deal (mini) dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
                                             .send_files(
                                                 ctx,
@@ -113,14 +113,14 @@ pub async fn run(
                                     });
                                 }
                                 "surreal_deal" => {
-                                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query the surreal deal dataset!!!", channel.id.as_u64())).await?;
+                                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal dataset.", channel.id.as_u64())).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
+                                        channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
-                                        channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with the surreal deal dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                        channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with the Surreal deal dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
                                             .send_files(
                                                 ctx,
@@ -150,17 +150,17 @@ pub async fn run(
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
-                                interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> your file is now being downloaded!!!", channel.id.as_u64())).await?;
+                                interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while your file is now being uploaded. Once you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64())).await?;
                                 match attachment.download().await {
                                     Ok(data) => {
-                                        interaction_reply_edit(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> data is currently being loaded, soon you'll be able to query your dataset!!!", channel.id.as_u64())).await?;
+                                        interaction_reply_edit(command, ctx.clone(), format!(":information_source: You now have your own database instance! hHead over to <#{}> while your file is now being imported. Once you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64())).await?;
                                         println!("attachment downloaded");
 
                                         let db = db.clone();
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            channel.say(&ctx, format!("## This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## (note this channel will expire after {:#?} of inactivity)", config.ttl)).await.unwrap();
+                                            channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
                                             if let Err(why) = db
                                                 .query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
@@ -168,19 +168,19 @@ pub async fn run(
                                                 interaction_reply_edit(
                                                     &command,
                                                     ctx.clone(),
-                                                    format!("Error importing from file, please ensure that files are valid SurrealQL: {}", why),
+                                                    format!(":x: Error importing from file, please ensure that files are valid SurrealQL: {}", why),
                                                 )
                                                 .await
                                                 .ok();
-                                                channel.say(&ctx, format!("Error loading data, channel will be deleted: {why}")).await.ok();
+                                                channel.say(&ctx, format!(":x: Error loading data, channel will be deleted: {why}")).await.ok();
                                                 channel.delete(ctx).await.ok();
                                                 return;
                                             }
-                                            channel.say(&ctx, format!("<@{}>This channel is now connected to a SurrealDB instance with your dataset, try writing some SurrealQL!!!", command.user.id.as_u64())).await.unwrap();
+                                            channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with your dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                             interaction_reply_edit(
                                                 &command,
                                                 ctx,
-                                                format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL to query your data!!!", channel.id.as_u64()),
+                                                format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL to query your data!", channel.id.as_u64()),
                                             )
                                             .await
                                             .unwrap();
@@ -190,28 +190,28 @@ pub async fn run(
                                         interaction_reply_edit(
                                             command,
                                             ctx,
-                                            format!("Error with attachment: {}", why),
+                                            format!(":x: Error with attachment: {}", why),
                                         )
                                         .await?;
                                         return Ok(());
                                     }
                                 }
                             } else {
-                                interaction_reply_edit(command, ctx, "Error with attachment")
+                                interaction_reply_edit(command, ctx, ":x: Error with attachment")
                                     .await?;
                                 return Ok(());
                             }
                         }
                         _ => {
-                            interaction_reply_ephemeral(command, ctx, "Unsupported option type")
+                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
                                 .await?;
                             return Ok(());
                         }
                     }
                 }
                 Ordering::Less => {
-                    channel.say(&ctx, format!("This channel is now connected to a SurrealDB instance, try writing some SurrealQL!!!\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
-                    interaction_reply_ephemeral(command, ctx.clone(), format!("You now have your own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
+                    channel.say(&ctx, format!(":information_source: This channel is now connected to a SurrealDB instance, try writing some SurrealQL! \n_Please note this channel will expire after {:#?} of inactivity_", config.ttl)).await?;
+                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance, head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
                 }
             };
 
@@ -230,7 +230,7 @@ pub async fn run(
             return interaction_reply(
                 command,
                 ctx,
-                "Direct messages are not currently supported".to_string(),
+                ":warning: Direct messages are not currently supported".to_string(),
             )
             .await;
         }
@@ -245,7 +245,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
         .create_option(|option| {
             option
                 .name("file")
-                .description("a SurrealQL to load into the database instance")
+                .description("A SurrealQL file to load into the database instance")
                 .kind(CommandOptionType::Attachment)
                 .required(false)
         })

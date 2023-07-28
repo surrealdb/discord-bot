@@ -23,7 +23,7 @@ pub async fn run(
                 Ok(response) => {
                     match response {
                         Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, "No config found for this server, please ask an administrator to configure the bot".to_string()).await
+                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot".to_string()).await
                     }
                 }
                 Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
@@ -40,8 +40,8 @@ pub async fn run(
 
             let db = create_db_instance(&config).await?;
 
-            channel.say(&ctx, format!("This public thread is now connected to a SurrealDB instance, try writing some SurrealQL!!!\nuse /load to load a premade dataset or your own SurrealQL\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
-            interaction_reply_ephemeral(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
+            channel.say(&ctx, format!(":information_source: This public thread is now connected to a SurrealDB instance. Try writing some SurrealQL! \nIf you want, you can use `/load` to load a premade dataset or your own SurrealQL from a file. \n_Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await?;
+            interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
 
             register_db(ctx, db, channel, config, crate::ConnType::Thread, true).await?;
             return Ok(());
@@ -50,7 +50,7 @@ pub async fn run(
             return interaction_reply(
                 command,
                 ctx,
-                "Direct messages are not currently supported".to_string(),
+                ":warning: Direct messages are not currently supported".to_string(),
             )
             .await;
         }

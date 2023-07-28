@@ -25,7 +25,7 @@ pub async fn run(
         Ok(response) => match response {
             Some(c) => {c}
 
-            None => return interaction_reply(command, ctx.clone(), format!("This server is not yet configured, use /configure to add initial configuration")).await,
+            None => return interaction_reply(command, ctx.clone(), format!(":warning: This server is not yet configured, use `/configure` to add initial configuration")).await,
         },
         Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
@@ -47,12 +47,12 @@ pub async fn run(
     let msg = match updated {
         Ok(response) => match response {
             Some(c) => {
-                format!("This server is now configured with: {:?}", c)
+                format!(":white_check_mark: This server is now configured with: {:?}", c)
             }
 
-            None => "Error adding configuration".to_string(),
+            None => ":x: Error adding configuration".to_string(),
         },
-        Err(e) => format!("Database error: {}", e),
+        Err(e) => format!(":x: Database error: {}", e),
     };
     interaction_reply(command, ctx.clone(), msg).await
 }
@@ -61,7 +61,7 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
     config::register_options(
         command
             .name("config_update")
-            .description("Update configuration options for SurrealBot")
+            .description("Update configuration options for SurrealBot in this server")
             .default_member_permissions(Permissions::MANAGE_CHANNELS),
         false,
     )

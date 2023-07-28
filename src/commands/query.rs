@@ -23,7 +23,7 @@ pub async fn run(
             interaction_reply_ephemeral(
                 command,
                 ctx,
-                "No database instance found for this channel",
+                ":warning: No database instance found for this channel",
             )
             .await?;
             return Ok(());
@@ -54,11 +54,11 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("query")
-        .description("query database instance")
+        .description("Query SurrealDB")
         .create_option(|option| {
             option
                 .name("query")
-                .description("query string to send to the database instance")
+                .description("Query string to send to SurrealDB")
                 .kind(CommandOptionType::String)
                 .required(true)
         })

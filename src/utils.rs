@@ -95,7 +95,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
         channel
             .say(
                 &ctx,
-                "This database instance has expired and is no longer functional",
+                ":information_source: This database instance has expired and is no longer functional",
             )
             .await
             .ok();
@@ -120,7 +120,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
                             .await
                             .ok();
                     } else {
-                        channel.send_message(&ctx, |m| m.content("Your database is too powerful, (the export is too large to send)")).await.ok();
+                        channel.send_message(&ctx, |m| m.content(":x: Your database is too powerful, (the export is too large to send)")).await.ok();
                     }
                 }
 
@@ -129,7 +129,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             Err(why) => {
                 channel
                     .send_message(&ctx, |m| {
-                        m.content(format!("Database export failed: {why}"))
+                        m.content(format!(":x: Database export failed: {why}"))
                     })
                     .await
                     .ok();
@@ -245,7 +245,7 @@ pub async fn respond(
             .send_message(&ctx, |m| {
                 let message = m.reference_message(&query_msg).add_file(reply_attachment);
                 if truncated {
-                    message.content("Response was too long and has been truncated")
+                    message.content(":information_source: Response was too long and has been truncated")
                 } else {
                     message
                 }
@@ -268,14 +268,14 @@ pub async fn load_attachment(
             command,
             ctx.clone(),
             format!(
-                "Your file ({}) is now being downloaded!!!",
+                ":information_source: Your file ({}) is now being downloaded!",
                 attachment.filename
             ),
         )
         .await?;
         match attachment.download().await {
             Ok(data) => {
-                interaction_reply_edit(command, ctx.clone(), format!("Your data is currently being loaded, soon you'll be able to query your dataset!!!")).await?;
+                interaction_reply_edit(command, ctx.clone(), format!(":information_source: Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_")).await?;
 
                 let db = db.clone();
                 let (_channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
@@ -284,7 +284,7 @@ pub async fn load_attachment(
                         interaction_reply_edit(
                             &command,
                             ctx,
-                            format!("Error importing from file, please ensure that files are valid SurrealQL: {}", why),
+                            format!(":x: Error importing from file, please ensure that files are valid SurrealQL: {}", why),
                         )
                         .await
                         .unwrap();
@@ -293,7 +293,7 @@ pub async fn load_attachment(
                     interaction_reply_edit(
                         &command,
                         ctx,
-                        format!("Your data is now loaded and ready to query!!!"),
+                        format!(":information_source: Your data is now loaded and ready to query!"),
                     )
                     .await
                     .unwrap();
@@ -301,13 +301,13 @@ pub async fn load_attachment(
                 Ok(())
             }
             Err(why) => {
-                interaction_reply_edit(command, ctx, format!("Error with attachment: {}", why))
+                interaction_reply_edit(command, ctx, format!(":x: Error with attachment: {}", why))
                     .await?;
                 Ok(())
             }
         }
     } else {
-        interaction_reply_edit(command, ctx, "Error with attachment").await?;
+        interaction_reply_edit(command, ctx, ":x: Error with attachment").await?;
         Ok(())
     }
 }

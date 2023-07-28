@@ -19,7 +19,7 @@ pub async fn run(
         let channel = match ChannelId(id.clone()).to_channel(&ctx).await.unwrap() {
             Channel::Guild(c) => c,
             _ => {
-                interaction_reply_ephemeral(command, ctx, "Command only works in guild channels")
+                interaction_reply_ephemeral(command, ctx, ":warning: This command only works in guild channels")
                     .await?;
                 return Ok(());
             }
@@ -28,12 +28,12 @@ pub async fn run(
         tokio::spawn(async move { clean_channel(channel, &ctx).await });
     }
 
-    interaction_reply_ephemeral(command, ctx, "Channels should now be cleaned").await
+    interaction_reply_ephemeral(command, ctx, ":white_check_mark: All channels should now be cleaned").await
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("clean_all")
-        .description("clean all channels, this should only be used before a bot is shut down!")
+        .description("Cleans all channels, this should only be used before a bot is shutdown!")
         .default_member_permissions(Permissions::MANAGE_CHANNELS)
 }
