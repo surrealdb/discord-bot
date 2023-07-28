@@ -43,7 +43,7 @@ pub async fn run(
             channel.say(&ctx, format!("This public thread is now connected to a SurrealDB instance, try writing some SurrealQL!!!\nuse /load to load a premade dataset or your own SurrealQL\n(note this channel will expire after {:#?} of inactivity)", config.ttl)).await?;
             interaction_reply_ephemeral(command, ctx.clone(), format!("You now have you're own database instance, head over to <#{}> to start writing SurrealQL!!!", channel.id.as_u64())).await?;
 
-            register_db(ctx, db, channel, config, crate::ConnType::Thread, false).await?;
+            register_db(ctx, db, channel, config, crate::ConnType::Thread, true).await?;
             return Ok(());
         }
         None => {
