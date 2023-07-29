@@ -21,6 +21,7 @@ use tokio::{
     fs,
     time::{sleep_until, Instant},
 };
+use tracing::Instrument;
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
 
@@ -88,7 +89,9 @@ pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
     }
 }
 
+#[instrument(skip_all, fields(guild_id = channel.guild_id.as_u64(), channel_id = channel.id.as_u64(), channel_name = channel.name.clone()))]
 pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
+    info!("Cleaning up channel");
     let entry = DBCONNS.lock().await.remove(channel.id.as_u64());
 
     if let Some(conn) = entry {
@@ -164,6 +167,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
         .ok();
 }
 
+#[instrument(skip_all)]
 pub async fn register_db(
     ctx: Context,
     db: Surreal<Db>,
@@ -172,10 +176,11 @@ pub async fn register_db(
     conn_type: ConnType,
     require_query: bool,
 ) -> Result<(), anyhow::Error> {
+    info!("Registering a new database");
     DBCONNS.lock().await.insert(
         channel.id.as_u64().clone(),
         crate::Conn {
-            db: db,
+            db,
             last_used: Instant::now(),
             conn_type,
             ttl: config.ttl.clone(),
@@ -205,7 +210,7 @@ pub async fn register_db(
             }
             sleep_until(last_time + ttl).await;
         }
-    });
+    }.instrument(tracing::Span::current()));
     Ok(())
 }
 
@@ -297,7 +302,7 @@ pub async fn load_attachment(
                     )
                     .await
                     .unwrap();
-                });
+                }.instrument(tracing::Span::current()));
                 Ok(())
             }
             Err(why) => {
@@ -312,7 +317,9 @@ pub async fn load_attachment(
     }
 }
 
+#[instrument]
 pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, anyhow::Error> {
+    info!("Creating database instance");
     let db_config = surrealdb::opt::Config::new()
         .query_timeout(server_config.timeout)
         .transaction_timeout(server_config.timeout);

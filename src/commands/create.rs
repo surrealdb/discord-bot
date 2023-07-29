@@ -10,6 +10,7 @@ use serenity::model::prelude::{AttachmentType, Guild, PermissionOverwrite, UserI
 use serenity::model::Permissions;
 use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
+use tracing::Instrument;
 
 use crate::{premade, utils::*};
 
@@ -35,8 +36,6 @@ pub async fn run(
                 }
                 Err(e) => return interaction_reply_ephemeral(command, ctx, format!(":x: Database error: {}", e)).await,
             };
-
-            println!("options array length:{:?}", command.data.options.len());
 
             let guild = Guild::get(&ctx, id).await.unwrap();
 
@@ -110,7 +109,7 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    });
+                                    }.instrument(tracing::Span::current()));
                                 }
                                 "surreal_deal" => {
                                     interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal dataset.", channel.id.as_u64())).await?;
@@ -131,10 +130,10 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    });
+                                    }.instrument(tracing::Span::current()));
                                 }
-                                _ => {
-                                    println!("wildcard hit");
+                                dataset => {
+                                    warn!(dataset, "Unknown dataset was requested");
                                     interaction_reply_ephemeral(
                                         command,
                                         ctx,
@@ -146,7 +145,6 @@ pub async fn run(
                             }
                         }
                         CommandOptionType::Attachment => {
-                            // let val = op_option.resolved.unwrap();
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
@@ -154,7 +152,6 @@ pub async fn run(
                                 match attachment.download().await {
                                     Ok(data) => {
                                         interaction_reply_edit(command, ctx.clone(), format!(":information_source: You now have your own database instance! hHead over to <#{}> while your file is now being imported. Once you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64())).await?;
-                                        println!("attachment downloaded");
 
                                         let db = db.clone();
                                         let (channel, ctx, command) =
@@ -184,7 +181,7 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                        });
+                                        }.instrument(tracing::Span::current()));
                                     }
                                     Err(why) => {
                                         interaction_reply_edit(

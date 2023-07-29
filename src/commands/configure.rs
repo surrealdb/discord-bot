@@ -15,8 +15,7 @@ pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    println!("\n\n\n\n");
-    println!("{:?}", command.data.options);
+    debug!(command_options = ?command.data.options, "command options");
 
     let result: Result<Option<Config>, surrealdb::Error> = DB
         .select(("guild_config", command.guild_id.unwrap().to_string()))
@@ -31,9 +30,6 @@ pub async fn run(
         Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
 
-    assert_eq!(command.data.options[0].name, "active");
-    assert_eq!(command.data.options[1].name, "archive");
-
     let config = match Config::from_builder(ConfigBuilder::build(command)) {
         Some(c) => c,
         None => {
@@ -46,8 +42,7 @@ pub async fn run(
         }
     };
 
-    println!("created config struct");
-    println!("{:?}", config);
+    debug!(config = ?config, "created config struct");
 
     let created: Result<Option<Config>, surrealdb::Error> = DB
         .create(("guild_config", config.guild_id.to_string()))
@@ -60,9 +55,15 @@ pub async fn run(
                 format!(":information_source: This server is now configured with: {:?}", c)
             }
 
-            None => ":x: Error adding configuration".to_string(),
+            None => {
+                warn!("Error adding configuration");
+                ":x: Error adding configuration".to_string()
+            },
         },
-        Err(e) => format!(":x: Database error: {}", e),
+        Err(e) => {
+            error!(error = %e, "database error");
+            format!(":x: Database error: {}", e)
+        },
     };
     interaction_reply(command, ctx.clone(), msg).await
 }
