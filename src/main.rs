@@ -1,12 +1,10 @@
-
-
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
 use dotenv::dotenv;
-use tracing::error;
 use std::env;
 use std::path::Path;
+use tracing::error;
 
 use surrealdb::engine::local::{Mem, RocksDb};
 
@@ -19,7 +17,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing_subscriber::fmt()
         .pretty()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(tracing_subscriber::EnvFilter::new(
+            env::var("RUST_LOG").unwrap_or_default(),
+        ))
         .init();
 
     match env::var("CONFIG_DB_PATH") {
