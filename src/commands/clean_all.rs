@@ -17,19 +17,30 @@ pub async fn run(
 ) -> Result<(), anyhow::Error> {
     let map = (*DBCONNS.lock().await).clone();
     for id in map.keys() {
-        let channel = match ChannelId(id.clone()).to_channel(&ctx).await.unwrap() {
+        let channel = match ChannelId(*id).to_channel(&ctx).await.unwrap() {
             Channel::Guild(c) => c,
             _ => {
-                interaction_reply_ephemeral(command, ctx, ":warning: This command only works in guild channels")
-                    .await?;
+                interaction_reply_ephemeral(
+                    command,
+                    ctx,
+                    ":warning: This command only works in guild channels",
+                )
+                .await?;
                 return Ok(());
             }
         };
         let (channel, ctx) = (channel.clone(), ctx.clone());
-        tokio::spawn(async move { clean_channel(channel, &ctx).await }.instrument(tracing::Span::current()));
+        tokio::spawn(
+            async move { clean_channel(channel, &ctx).await }.instrument(tracing::Span::current()),
+        );
     }
 
-    interaction_reply_ephemeral(command, ctx, ":white_check_mark: All channels should now be cleaned").await
+    interaction_reply_ephemeral(
+        command,
+        ctx,
+        ":white_check_mark: All channels should now be cleaned",
+    )
+    .await
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {

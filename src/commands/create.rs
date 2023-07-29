@@ -55,7 +55,7 @@ pub async fn run(
                         .union(Permissions::READ_MESSAGE_HISTORY),
                     deny: Permissions::empty(),
                     kind: serenity::model::prelude::PermissionOverwriteType::Member(UserId(
-                        command.application_id.as_u64().clone(),
+                        *command.application_id.as_u64(),
                     )),
                 },
                 PermissionOverwrite {
@@ -102,7 +102,7 @@ pub async fn run(
                                         channel
                                             .send_files(
                                                 ctx,
-                                                [AttachmentType::Path(&Path::new(
+                                                [AttachmentType::Path(Path::new(
                                                     "premade/surreal_deal.png",
                                                 ))],
                                                 |m| m.content("schema:"),
@@ -123,7 +123,7 @@ pub async fn run(
                                         channel
                                             .send_files(
                                                 ctx,
-                                                [AttachmentType::Path(&Path::new(
+                                                [AttachmentType::Path(Path::new(
                                                     "premade/surreal_deal.png",
                                                 ))],
                                                 |m| m.content("schema:"),
@@ -200,8 +200,12 @@ pub async fn run(
                             }
                         }
                         _ => {
-                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
-                                .await?;
+                            interaction_reply_ephemeral(
+                                command,
+                                ctx,
+                                ":x: Unsupported option type",
+                            )
+                            .await?;
                             return Ok(());
                         }
                     }
@@ -221,15 +225,15 @@ pub async fn run(
                 false,
             )
             .await?;
-            return Ok(());
+            Ok(())
         }
         None => {
-            return interaction_reply(
+            interaction_reply(
                 command,
                 ctx,
                 ":warning: Direct messages are not currently supported".to_string(),
             )
-            .await;
+            .await
         }
     }
 }

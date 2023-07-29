@@ -52,18 +52,21 @@ pub async fn run(
     let msg = match created {
         Ok(response) => match response {
             Some(c) => {
-                format!(":information_source: This server is now configured with: {:?}", c)
+                format!(
+                    ":information_source: This server is now configured with: {:?}",
+                    c
+                )
             }
 
             None => {
                 warn!("Error adding configuration");
                 ":x: Error adding configuration".to_string()
-            },
+            }
         },
         Err(e) => {
             error!(error = %e, "database error");
             format!(":x: Database error: {}", e)
-        },
+        }
     };
     interaction_reply(command, ctx.clone(), msg).await
 }

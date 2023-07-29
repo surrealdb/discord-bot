@@ -117,15 +117,15 @@ pub async fn run(
                 }
                 Ordering::Less => interaction_reply(command, ctx, format!(":information_source: This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the `/query` command! \n_Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await?,
             };
-            return Ok(());
+            Ok(())
         }
         None => {
-            return interaction_reply(
+            interaction_reply(
                 command,
                 ctx,
                 ":warning: Direct messages are not currently supported".to_string(),
             )
-            .await;
+            .await
         }
     }
 }
@@ -182,7 +182,7 @@ async fn load_premade(
                         channel
                             .send_files(
                                 ctx,
-                                [AttachmentType::Path(&Path::new(&format!(
+                                [AttachmentType::Path(Path::new(&format!(
                                     "premade/{}",
                                     scheme_file_name
                                 )))],

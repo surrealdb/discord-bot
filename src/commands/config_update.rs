@@ -24,7 +24,7 @@ pub async fn run(
         Ok(response) => match response {
             Some(c) => {c}
 
-            None => return interaction_reply(command, ctx.clone(), format!(":warning: This server is not yet configured, use `/configure` to add initial configuration")).await,
+            None => return interaction_reply(command, ctx.clone(), ":warning: This server is not yet configured, use `/configure` to add initial configuration".to_string()).await,
         },
         Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
@@ -44,18 +44,21 @@ pub async fn run(
     let msg = match updated {
         Ok(response) => match response {
             Some(c) => {
-                format!(":white_check_mark: This server is now configured with: {:?}", c)
+                format!(
+                    ":white_check_mark: This server is now configured with: {:?}",
+                    c
+                )
             }
 
             None => {
                 warn!("error updating configuration");
                 ":x: Error updating configuration".to_string()
-            },
+            }
         },
         Err(e) => {
             error!(error = %e, "database error");
             format!(":x: Database error: {}", e)
-        },
+        }
     };
     interaction_reply(command, ctx.clone(), msg).await
 }

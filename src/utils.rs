@@ -85,7 +85,7 @@ pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
             .union(Permissions::SEND_MESSAGES)
             .union(Permissions::READ_MESSAGE_HISTORY),
         deny: Permissions::empty(),
-        kind: kind,
+        kind,
     }
 }
 
@@ -178,39 +178,42 @@ pub async fn register_db(
 ) -> Result<(), anyhow::Error> {
     info!("Registering a new database");
     DBCONNS.lock().await.insert(
-        channel.id.as_u64().clone(),
+        *channel.id.as_u64(),
         crate::Conn {
             db,
             last_used: Instant::now(),
             conn_type,
-            ttl: config.ttl.clone(),
-            pretty: config.pretty.clone(),
-            json: config.json.clone(),
+            ttl: config.ttl,
+            pretty: config.pretty,
+            json: config.json,
             require_query,
         },
     );
 
-    tokio::spawn(async move {
-        let mut last_time;
-        let mut ttl;
-        loop {
-            match DBCONNS.lock().await.get(channel.id.as_u64()) {
-                Some(e) => {
-                    last_time = e.last_used;
-                    ttl = e.ttl
+    tokio::spawn(
+        async move {
+            let mut last_time;
+            let mut ttl;
+            loop {
+                match DBCONNS.lock().await.get(channel.id.as_u64()) {
+                    Some(e) => {
+                        last_time = e.last_used;
+                        ttl = e.ttl
+                    }
+                    None => {
+                        clean_channel(channel, &ctx).await;
+                        break;
+                    }
                 }
-                None => {
+                if last_time.elapsed() >= ttl {
                     clean_channel(channel, &ctx).await;
                     break;
                 }
+                sleep_until(last_time + ttl).await;
             }
-            if last_time.elapsed() >= ttl {
-                clean_channel(channel, &ctx).await;
-                break;
-            }
-            sleep_until(last_time + ttl).await;
         }
-    }.instrument(tracing::Span::current()));
+        .instrument(tracing::Span::current()),
+    );
     Ok(())
 }
 
@@ -250,7 +253,9 @@ pub async fn respond(
             .send_message(&ctx, |m| {
                 let message = m.reference_message(&query_msg).add_file(reply_attachment);
                 if truncated {
-                    message.content(":information_source: Response was too long and has been truncated")
+                    message.content(
+                        ":information_source: Response was too long and has been truncated",
+                    )
                 } else {
                     message
                 }
@@ -280,7 +285,7 @@ pub async fn load_attachment(
         .await?;
         match attachment.download().await {
             Ok(data) => {
-                interaction_reply_edit(command, ctx.clone(), format!(":information_source: Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_")).await?;
+                interaction_reply_edit(command, ctx.clone(), ":information_source: Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_".to_string()).await?;
 
                 let db = db.clone();
                 let (_channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
@@ -298,7 +303,7 @@ pub async fn load_attachment(
                     interaction_reply_edit(
                         &command,
                         ctx,
-                        format!(":information_source: Your data is now loaded and ready to query!"),
+                        ":information_source: Your data is now loaded and ready to query!".to_string(),
                     )
                     .await
                     .unwrap();

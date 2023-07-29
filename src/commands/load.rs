@@ -23,7 +23,7 @@ pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    if command.data.options.len() == 0 {
+    if command.data.options.is_empty() {
         interaction_reply_ephemeral(
             command,
             ctx,
@@ -97,8 +97,12 @@ pub async fn run(
                             load_attachment(op_option, command, ctx, db, channel).await?
                         }
                         _ => {
-                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
-                                .await?;
+                            interaction_reply_ephemeral(
+                                command,
+                                ctx,
+                                ":x: Unsupported option type",
+                            )
+                            .await?;
                             return Ok(());
                         }
                     }
@@ -106,15 +110,15 @@ pub async fn run(
                 Ordering::Less => panic!(),
             };
 
-            return Ok(());
+            Ok(())
         }
         None => {
-            return interaction_reply(
+            interaction_reply(
                 command,
                 ctx,
                 ":warning: Direct messages are not currently supported".to_string(),
             )
-            .await;
+            .await
         }
     }
 }
@@ -171,7 +175,7 @@ async fn load_premade(
                         channel
                             .send_files(
                                 ctx,
-                                [AttachmentType::Path(&Path::new(&format!(
+                                [AttachmentType::Path(Path::new(&format!(
                                     "premade/{}",
                                     scheme_file_name
                                 )))],

@@ -1,5 +1,6 @@
 pub mod channel_info;
 pub mod commands;
+pub mod components;
 pub mod config;
 pub mod db_utils;
 pub mod handler;
