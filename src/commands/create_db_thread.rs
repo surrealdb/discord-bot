@@ -58,5 +58,7 @@ pub async fn run(
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command
         .name("create_db_thread")
+        .name_localized("en-US", "Create a DB Thread")
+        .name_localized("en-GB", "Create a DB Thread")
         .kind(serenity::model::prelude::command::CommandType::Message)
 }
