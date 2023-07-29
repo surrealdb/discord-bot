@@ -10,6 +10,7 @@ use serenity::prelude::Context;
 use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 use tokio::time::Instant;
+use tracing::Instrument;
 
 use crate::premade;
 
@@ -33,8 +34,6 @@ pub async fn run(
     }
     match command.guild_id {
         Some(_guild_id) => {
-            println!("options array length:{:?}", command.data.options.len());
-
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
 
             let db = match DBCONNS.lock().await.get_mut(command.channel_id.as_u64()) {
@@ -82,8 +81,8 @@ pub async fn run(
                                     )
                                     .await?;
                                 }
-                                _ => {
-                                    println!("wildcard hit");
+                                dataset => {
+                                    warn!(dataset, "Unknown dataset was requested");
                                     interaction_reply_ephemeral(
                                         command,
                                         ctx,
@@ -188,7 +187,7 @@ async fn load_premade(
                         .unwrap();
                 }
             };
-        });
+        }.instrument(tracing::Span::current()));
         Ok(())
     }
 }

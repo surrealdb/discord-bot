@@ -29,8 +29,6 @@ pub async fn run(
                 Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
             };
 
-            println!("options array length:{:?}", command.data.options.len());
-
             let message = command.data.resolved.messages.keys().next().unwrap();
 
             let channel = command

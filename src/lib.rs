@@ -13,6 +13,9 @@ use surrealdb::{sql::Value, Response};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 
+#[macro_use]
+extern crate tracing;
+
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;

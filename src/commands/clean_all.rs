@@ -5,6 +5,7 @@ use serenity::model::Permissions;
 use serenity::builder::CreateApplicationCommand;
 
 use serenity::prelude::*;
+use tracing::Instrument;
 
 use crate::utils::clean_channel;
 use crate::utils::interaction_reply_ephemeral;
@@ -25,7 +26,7 @@ pub async fn run(
             }
         };
         let (channel, ctx) = (channel.clone(), ctx.clone());
-        tokio::spawn(async move { clean_channel(channel, &ctx).await });
+        tokio::spawn(async move { clean_channel(channel, &ctx).await }.instrument(tracing::Span::current()));
     }
 
     interaction_reply_ephemeral(command, ctx, ":white_check_mark: All channels should now be cleaned").await

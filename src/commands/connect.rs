@@ -8,6 +8,7 @@ use serenity::model::prelude::{AttachmentType, GuildChannel};
 use serenity::prelude::Context;
 use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
+use tracing::Instrument;
 
 use crate::{premade, utils::*, DBCONNS};
 
@@ -197,7 +198,7 @@ async fn load_premade(
                         .unwrap();
                 }
             };
-        });
+        }.instrument(tracing::Span::current()));
         Ok(())
     }
 }

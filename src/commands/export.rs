@@ -17,8 +17,6 @@ pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    println!("{:?}", command.data.options);
-
     let conn = match DBCONNS.lock().await.get(command.channel_id.as_u64()) {
         Some(c) => c.clone(),
         None => {

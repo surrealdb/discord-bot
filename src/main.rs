@@ -1,7 +1,10 @@
+
+
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
 use dotenv::dotenv;
+use tracing::error;
 use std::env;
 use std::path::Path;
 
@@ -13,6 +16,11 @@ use surreal_bot::DB;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
+
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     match env::var("CONFIG_DB_PATH") {
         Ok(path) => {
@@ -35,7 +43,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
-        println!("An error occurred while running the client: {:?}", why);
+        error!(error = %why, "An error occurred while running the client");
     }
     Ok(())
 }
