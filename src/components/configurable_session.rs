@@ -1,11 +1,26 @@
-use crate::{ConnType, DBCONNS, config::Config, utils::clean_channel, DB};
+use crate::{config::Config, utils::clean_channel, ConnType, DB, DBCONNS};
 
-use serenity::{model::prelude::{GuildChannel, component::{ButtonStyle::{Primary, Danger, Secondary, Success}, ActionRow, InputTextStyle::{Short, Paragraph}, ActionRowComponent, InputText}, ChannelId, message_component::MessageComponentInteraction, InteractionResponseType::Modal, modal::ModalSubmitInteraction, ReactionType}, prelude::Context};
 use anyhow::Result;
 use humantime::format_duration;
+use serenity::{
+    model::prelude::{
+        component::{
+            ActionRow, ActionRowComponent,
+            ButtonStyle::{Danger, Primary, Secondary, Success},
+            InputText,
+            InputTextStyle::{Paragraph, Short},
+        },
+        message_component::MessageComponentInteraction,
+        modal::ModalSubmitInteraction,
+        ChannelId, GuildChannel,
+        InteractionResponseType::Modal,
+        ReactionType,
+    },
+    prelude::Context,
+};
 
 /// Send a message to the server with prebuilt components for DB channel configuration management
-pub async fn show_configurable_session(
+pub async fn show(
     ctx: &Context,
     channel: &GuildChannel,
     conn: ConnType,
@@ -28,7 +43,7 @@ pub async fn show_configurable_session(
             .field("Session lifetime after last query is ", format_duration(config.ttl), true)
             .field("Query timeout is set to ", format_duration(config.timeout), true)
         })
-        .components(|c| { 
+        .components(|c| {
             c.create_action_row(|r| {
                 r.create_select_menu(|s| {
                     s.custom_id("configurable_session:format").placeholder("Select output format").min_values(1).max_values(1).options(|o| {
@@ -65,9 +80,15 @@ pub async fn show_configurable_session(
 }
 
 #[instrument(skip(ctx, event))]
-pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInteraction, channel: &ChannelId, id: &str, values: &[String]) -> Result<()> {
+pub async fn handle_component(
+    ctx: &Context,
+    event: &MessageComponentInteraction,
+    channel: &ChannelId,
+    id: &str,
+    values: &[String],
+) -> Result<()> {
     let db_exists = DBCONNS.lock().await.get(&channel.0).is_some();
-    
+
     match (id, db_exists) {
         ("format", true) | ("prettify", true) | ("require_query", true) => {
             debug!("Updating config");
@@ -76,17 +97,22 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
                 "format" => db.json = values[0] == "json",
                 "prettify" => db.pretty = values[0] == "true",
                 "require_query" => db.require_query = values[0] == "true",
-                _ => unreachable!()
+                _ => unreachable!(),
             }
             DBCONNS.lock().await.insert(channel.0, db);
-            event.create_interaction_response(&ctx, |r| {
-                r.interaction_response_data(|d| {
-                    d.embed(|e| {
-                        e.title("Config updated").description(format!("{} is now set to {}", id, values[0])).color(0x00ff00)
-                    }).ephemeral(true)
+            event
+                .create_interaction_response(&ctx, |r| {
+                    r.interaction_response_data(|d| {
+                        d.embed(|e| {
+                            e.title("Config updated")
+                                .description(format!("{} is now set to {}", id, values[0]))
+                                .color(0x00ff00)
+                        })
+                        .ephemeral(true)
+                    })
                 })
-            }).await?;
-        },
+                .await?;
+        }
         ("export", true) => {
             debug!("Exporting database");
             let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
@@ -101,61 +127,90 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
                         })
                     }).await?;
                     tokio::fs::remove_file(path).await?;
-                },
+                }
                 Ok(None) => {
-                    event.create_interaction_response(&ctx, |r| {
-                        r.interaction_response_data(|d| {
-                            d.embed(|e| {
-                                e.title("Failed to export").description("Export was too big...").color(0xff0000)
-                            }).ephemeral(true)
+                    event
+                        .create_interaction_response(&ctx, |r| {
+                            r.interaction_response_data(|d| {
+                                d.embed(|e| {
+                                    e.title("Failed to export")
+                                        .description("Export was too big...")
+                                        .color(0xff0000)
+                                })
+                                .ephemeral(true)
+                            })
                         })
-                    }).await?;
+                        .await?;
                 }
                 Err(err) => {
-                    event.create_interaction_response(&ctx, |r| {
-                        r.interaction_response_data(|d| {
-                            d.embed(|e| {
-                                e.title("Failed to export").description(format!("{err:#?}")).color(0xff0000)
-                            }).ephemeral(true)
+                    event
+                        .create_interaction_response(&ctx, |r| {
+                            r.interaction_response_data(|d| {
+                                d.embed(|e| {
+                                    e.title("Failed to export")
+                                        .description(format!("{err:#?}"))
+                                        .color(0xff0000)
+                                })
+                                .ephemeral(true)
+                            })
                         })
-                    }).await?;
+                        .await?;
                 }
             }
-        },
+        }
         ("stop", true) => {
             debug!("Stopping session per user request");
             clean_channel(channel.to_channel(&ctx).await?.guild().unwrap(), &ctx).await;
-        },
+        }
         ("big_query", true) => {
-            event.create_interaction_response(&ctx, |a| {
-                a.kind(Modal).interaction_response_data(|d| {
-                    d.components(|c| {
-                        c.create_action_row(|r| {
-                            r.create_input_text(|i| {
-                                i.custom_id("configurable_session:big_query").label("Big query (ignore errors from submit)").style(Paragraph).placeholder("Your Surreal query").required(true)
+            event
+                .create_interaction_response(&ctx, |a| {
+                    a.kind(Modal).interaction_response_data(|d| {
+                        d.components(|c| {
+                            c.create_action_row(|r| {
+                                r.create_input_text(|i| {
+                                    i.custom_id("configurable_session:big_query")
+                                        .label("Big query (ignore errors from submit)")
+                                        .style(Paragraph)
+                                        .placeholder("Your Surreal query")
+                                        .required(true)
+                                })
                             })
                         })
-                    }).custom_id("configurable_session:big_query").title("Big query editor")
+                        .custom_id("configurable_session:big_query")
+                        .title("Big query editor")
+                    })
                 })
-            }).await?;
-        },
+                .await?;
+        }
         ("reconnect", false) => {
             // TODO: feature creep but maybe a button to re-create a session after it's been deleted
-        },
+        }
         ("rename_thread", _) => {
             let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
-            event.create_interaction_response(&ctx, |a| {
-                a.kind(Modal).interaction_response_data(|d| {
-                    d.components(|c| {
-                        c.create_action_row(|r| {
-                            r.create_input_text(|i| {
-                                i.custom_id("configurable_session:rename_thread").label("Thread name").style(Short).value(channel_name).placeholder("New thread name").min_length(2).max_length(100).required(true)
+            event
+                .create_interaction_response(&ctx, |a| {
+                    a.kind(Modal).interaction_response_data(|d| {
+                        d.components(|c| {
+                            c.create_action_row(|r| {
+                                r.create_input_text(|i| {
+                                    i.custom_id("configurable_session:rename_thread")
+                                        .label("Thread name")
+                                        .style(Short)
+                                        .value(channel_name)
+                                        .placeholder("New thread name")
+                                        .min_length(2)
+                                        .max_length(100)
+                                        .required(true)
+                                })
                             })
                         })
-                    }).custom_id("configurable_session:rename_thread").title("Rename thread")
+                        .custom_id("configurable_session:rename_thread")
+                        .title("Rename thread")
+                    })
                 })
-            }).await?;
-        },
+                .await?;
+        }
         (_, false) => {
             info!("No connection found for channel");
             event.create_interaction_response(&ctx, |a| {
@@ -176,59 +231,77 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
 }
 
 #[instrument(skip(ctx, event))]
-pub async fn handle_session_modal(ctx: &Context, event: &ModalSubmitInteraction, channel: &ChannelId, id: &str, values: &[ActionRow]) -> Result<()> {
+pub async fn handle_modal(
+    ctx: &Context,
+    event: &ModalSubmitInteraction,
+    channel: &ChannelId,
+    id: &str,
+    values: &[ActionRow],
+) -> Result<()> {
     match id {
         "big_query" => {
-            if let ActionRowComponent::InputText(InputText{value, ..}) =  &values[0].components[0] {
+            if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
+            {
                 trace!(raw_query = value, "Received big query");
                 match surrealdb::sql::parse(&value) {
                     Ok(query) => {
                         debug!(query = ?query, "Parsed big query successfully");
                         let conn = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
                         conn.query(&ctx, channel, &event.user, query).await?;
-                    },
+                    }
                     Err(err) => {
                         debug!(err = ?err, "Failed to parse big query");
-                        event.create_interaction_response(&ctx, |r| {
-                            r.interaction_response_data(|d| {
-                                d.ephemeral(true).embed(|e| {
-                                    e.title("Failed to parse query").description(format!("```sql\n{err:#}```")).color(0xff0000)
+                        event
+                            .create_interaction_response(&ctx, |r| {
+                                r.interaction_response_data(|d| {
+                                    d.ephemeral(true).embed(|e| {
+                                        e.title("Failed to parse query")
+                                            .description(format!("```sql\n{err:#}```"))
+                                            .color(0xff0000)
+                                    })
                                 })
                             })
-                        }).await?;
-                        return Ok(())
+                            .await?;
+                        return Ok(());
                     }
                 }
             }
-        },
+        }
         "rename_thread" => {
-            if let ActionRowComponent::InputText(InputText{value, ..}) = &values[0].components[0] {
+            if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
+            {
                 let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
                 if value == &channel_name {
-                    event.create_interaction_response(&ctx, |r| {
-                        r.interaction_response_data(|d| {
-                            d.ephemeral(true).content("The new name is the same as the old name!")
+                    event
+                        .create_interaction_response(&ctx, |r| {
+                            r.interaction_response_data(|d| {
+                                d.ephemeral(true)
+                                    .content("The new name is the same as the old name!")
+                            })
                         })
-                    }).await?;
-                    return Ok(())
+                        .await?;
+                    return Ok(());
                 }
                 info!(old_name = %channel_name, new_name = %value, "Renaming thread");
-                channel.edit(&ctx, |c| {
-                    c.name(value)
-                }).await?;
-                event.create_interaction_response(&ctx, |r| {
-                    r.interaction_response_data(|d| {
-                        d.embed(|e| {
-                            e
-                            .title("Thread renamed")
-                            .description(format!("The thread has been renamed to `{}`", value))
-                            .color(0x00ff00)
-                            .author(|a| {
-                                a.name(&event.user.name).icon_url(event.user.avatar_url().unwrap_or_default())
+                channel.edit(&ctx, |c| c.name(value)).await?;
+                event
+                    .create_interaction_response(&ctx, |r| {
+                        r.interaction_response_data(|d| {
+                            d.embed(|e| {
+                                e.title("Thread renamed")
+                                    .description(format!(
+                                        "The thread has been renamed to `{}`",
+                                        value
+                                    ))
+                                    .color(0x00ff00)
+                                    .author(|a| {
+                                        a.name(&event.user.name)
+                                            .icon_url(event.user.avatar_url().unwrap_or_default())
+                                    })
                             })
                         })
                     })
-                }).await?;
+                    .await?;
             }
         }
         _ => {

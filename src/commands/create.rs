@@ -12,7 +12,7 @@ use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use tracing::Instrument;
 
-use crate::components::show_configurable_session;
+use crate::components::configurable_session::show;
 use crate::{premade, utils::*};
 
 use crate::config::Config;
@@ -99,7 +99,7 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
+                                        show(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}> Your instance now has Surreal deal (mini) dataset loaded, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
@@ -120,7 +120,7 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
+                                        show(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
                                         channel.say(&ctx, format!("<@{}> Your instance now has Surreal deal dataset loaded, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
@@ -160,7 +160,7 @@ pub async fn run(
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
+                                            show(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                             if let Err(why) = db
                                                 .query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
@@ -214,7 +214,13 @@ pub async fn run(
                     }
                 }
                 Ordering::Less => {
-                    show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await?;
+                    show(
+                        &ctx,
+                        &channel,
+                        crate::ConnType::EphemeralChannel,
+                        &config_clone,
+                    )
+                    .await?;
                     interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance, head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
                 }
             };

@@ -10,7 +10,7 @@ use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 use tracing::Instrument;
 
-use crate::components::show_configurable_session;
+use crate::components::configurable_session::show;
 use crate::{premade, utils::*, DBCONNS};
 
 use crate::config::Config;
@@ -111,20 +111,30 @@ pub async fn run(
                             }
                         }
                         CommandOptionType::Attachment => {
-                            show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
-                            load_attachment(op_option, command, ctx, db, channel).await?
-                        },
-                        _ => {
-                            interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
+                            show(&ctx, &channel, crate::ConnType::ConnectedChannel, &config)
                                 .await?;
+                            load_attachment(op_option, command, ctx, db, channel).await?
+                        }
+                        _ => {
+                            interaction_reply_ephemeral(
+                                command,
+                                ctx,
+                                ":x: Unsupported option type",
+                            )
+                            .await?;
                             return Ok(());
                         }
                     }
                 }
                 Ordering::Less => {
-                    show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
-                    interaction_reply_ephemeral(command, ctx, ":information_source: Your session is now available!").await?
-                },
+                    show(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
+                    interaction_reply_ephemeral(
+                        command,
+                        ctx,
+                        ":information_source: Your session is now available!",
+                    )
+                    .await?
+                }
             };
             Ok(())
         }
@@ -164,7 +174,7 @@ async fn load_premade(
     config: &Config,
 ) -> Result<(), anyhow::Error> {
     {
-        show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
+        show(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
         interaction_reply(
             command,
             ctx.clone(),

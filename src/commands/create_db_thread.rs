@@ -4,7 +4,7 @@ use serenity::model::prelude::application_command::ApplicationCommandInteraction
 use memorable_wordlist::kebab_case;
 use serenity::prelude::Context;
 
-use crate::components::show_configurable_session;
+use crate::components::configurable_session::show;
 use crate::utils::*;
 
 use crate::config::Config;
@@ -39,7 +39,7 @@ pub async fn run(
 
             let db = create_db_instance(&config).await?;
 
-            show_configurable_session(&ctx, &channel, crate::ConnType::Thread, &config).await?;
+            show(&ctx, &channel, crate::ConnType::Thread, &config).await?;
             interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
 
             register_db(ctx, db, channel, config, crate::ConnType::Thread, true).await?;

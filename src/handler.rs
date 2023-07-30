@@ -141,10 +141,20 @@ impl EventHandler for Handler {
                     trace!(event = ?event, "received component interaction");
                     let res = match event.data.custom_id.split_once(':') {
                         Some(("configurable_session", id)) => {
-                            crate::components::handle_session_component(
+                            crate::components::configurable_session::handle_component(
                                 &ctx,
                                 &event,
                                 &event.channel_id,
+                                &id,
+                                &event.data.values,
+                            )
+                            .await
+                        }
+                        Some(("configurable_server", id)) => {
+                            crate::components::configurable_server::handle_component(
+                                &ctx,
+                                &event,
+                                &event.guild_id.unwrap_or_default(),
                                 &id,
                                 &event.data.values,
                             )
@@ -175,10 +185,20 @@ impl EventHandler for Handler {
                     trace!(modal = ?modal, "received modal submit interaction");
                     let res = match modal.data.custom_id.split_once(':') {
                         Some(("configurable_session", id)) => {
-                            crate::components::handle_session_modal(
+                            crate::components::configurable_session::handle_modal(
                                 &ctx,
                                 &modal,
                                 &modal.channel_id,
+                                &id,
+                                &modal.data.components,
+                            )
+                            .await
+                        }
+                        Some(("configurable_server", id)) => {
+                            crate::components::configurable_server::handle_modal(
+                                &ctx,
+                                &modal,
+                                &modal.guild_id.unwrap_or_default(),
                                 &id,
                                 &modal.data.components,
                             )
