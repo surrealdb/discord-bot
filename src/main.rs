@@ -41,6 +41,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Error creating client");
 
+    let shard_manager = client.shard_manager.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
+        // TODO: gracefully shutdown DBCONNS
+        shard_manager.lock().await.shutdown_all().await;
+    });
+
     // start listening for events by starting a single shard
     if let Err(why) = client.start().await {
         error!(error = %why, "An error occurred while running the client");

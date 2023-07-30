@@ -22,7 +22,7 @@ surrealdb = { git = "https://github.com/surrealdb/surrealdb.git", features = [
     "kv-mem",
     "kv-rocksdb",
 ] }
-tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.29.1", features = ["macros", "signal", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
