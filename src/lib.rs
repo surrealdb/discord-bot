@@ -55,13 +55,13 @@ impl Conn {
     #[must_use]
     pub async fn export(&self, name: &str) -> Result<Option<PathBuf>, anyhow::Error> {
         let base_path = match std::env::var("TEMP_DIR_PATH") {
-            Ok(p) => p,
+            Ok(p) => PathBuf::from(p),
             Err(_) => {
                 tokio::fs::create_dir("tmp").await.ok();
-                "tmp/".to_string()
+                PathBuf::from("tmp/")
             }
         };
-        let path = format!("{base_path}{name}.surql");
+        let path = base_path.join(name).with_extension(".surql");
 
         match self.db.export(&path).await {
             Ok(()) => match tokio::fs::metadata(&path).await {
