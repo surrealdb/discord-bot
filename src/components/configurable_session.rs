@@ -1,4 +1,4 @@
-use crate::{ConnType, DBCONNS, config::Config, utils::respond, process};
+use crate::{ConnType, DBCONNS, config::Config, utils::clean_channel, DB};
 
 use serenity::{model::prelude::{GuildChannel, component::{ButtonStyle::{Primary, Danger, Secondary, Success}, ActionRow, InputTextStyle::{Short, Paragraph}, ActionRowComponent, InputText}, ChannelId, message_component::MessageComponentInteraction, InteractionResponseType::Modal, modal::ModalSubmitInteraction, ReactionType}, prelude::Context};
 use anyhow::Result;
@@ -11,6 +11,7 @@ pub async fn show_configurable_session(
     conn: ConnType,
     config: &Config,
 ) -> Result<()> {
+    let version = DB.version().await?;
     channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
@@ -21,6 +22,9 @@ pub async fn show_configurable_session(
                 ConnType::EphemeralChannel => "This brand new channel is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n\n* You can use `/share` to add friends to this channel.",
                 ConnType::Thread => "This public thread is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
             }))
+            .footer(|f| {
+                f.text(format!("SurrealDB Version: {}", version)).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+            })
             .field("Session lifetime after last query is ", format_duration(config.ttl), true)
             .field("Query timeout is set to ", format_duration(config.timeout), true)
         })
@@ -66,6 +70,7 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
     
     match (id, db_exists) {
         ("format", true) | ("prettify", true) | ("require_query", true) => {
+            debug!("Updating config");
             let mut db = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
             match id {
                 "format" => db.json = values[0] == "json",
@@ -76,15 +81,50 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
             DBCONNS.lock().await.insert(channel.0, db);
             event.create_interaction_response(&ctx, |r| {
                 r.interaction_response_data(|d| {
-                    d.ephemeral(true).content(":information_source: Updated session configuration")
+                    d.embed(|e| {
+                        e.title("Config updated").description(format!("{} is now set to {}", id, values[0])).color(0x00ff00)
+                    }).ephemeral(true)
                 })
             }).await?;
         },
         ("export", true) => {
-
+            debug!("Exporting database");
+            let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
+            let conn = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
+            match conn.export(&channel_name).await {
+                Ok(Some(path)) => {
+                    event.create_interaction_response(&ctx, |r| {
+                        r.interaction_response_data(|d| {
+                            d.embed(|e| {
+                                e.title("Exported successfully").description("Find the exported .surql file below.\nYou can either use `/load` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
+                            }).add_file(&path)
+                        })
+                    }).await?;
+                    tokio::fs::remove_file(path).await?;
+                },
+                Ok(None) => {
+                    event.create_interaction_response(&ctx, |r| {
+                        r.interaction_response_data(|d| {
+                            d.embed(|e| {
+                                e.title("Failed to export").description("Export was too big...").color(0xff0000)
+                            }).ephemeral(true)
+                        })
+                    }).await?;
+                }
+                Err(err) => {
+                    event.create_interaction_response(&ctx, |r| {
+                        r.interaction_response_data(|d| {
+                            d.embed(|e| {
+                                e.title("Failed to export").description(format!("{err:#?}")).color(0xff0000)
+                            }).ephemeral(true)
+                        })
+                    }).await?;
+                }
+            }
         },
         ("stop", true) => {
-
+            debug!("Stopping session per user request");
+            clean_channel(channel.to_channel(&ctx).await?.guild().unwrap(), &ctx).await;
         },
         ("big_query", true) => {
             event.create_interaction_response(&ctx, |a| {
@@ -100,7 +140,7 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
             }).await?;
         },
         ("reconnect", false) => {
-
+            // TODO: feature creep but maybe a button to re-create a session after it's been deleted
         },
         ("rename_thread", _) => {
             let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
@@ -120,7 +160,11 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
             info!("No connection found for channel");
             event.create_interaction_response(&ctx, |a| {
                 a.interaction_response_data(|d| {
-                    d.content(":warning: There is no database instance currently associated with this channel\nPlease use `/connect` to connect to a new SurrealDB instance.").ephemeral(true)
+                    d.embed(|e| {
+                        e.title("Session expired or terminated")
+                         .description("There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.")
+                         .color(0xff0000)
+                    }).ephemeral(true)
                 })
             }).await?;
         }
@@ -133,35 +177,23 @@ pub async fn handle_session_component(ctx: &Context, event: &MessageComponentInt
 
 #[instrument(skip(ctx, event))]
 pub async fn handle_session_modal(ctx: &Context, event: &ModalSubmitInteraction, channel: &ChannelId, id: &str, values: &[ActionRow]) -> Result<()> {
-    info!("Modal interaction received");
     match id {
         "big_query" => {
             if let ActionRowComponent::InputText(InputText{value, ..}) =  &values[0].components[0] {
+                trace!(raw_query = value, "Received big query");
                 match surrealdb::sql::parse(&value) {
                     Ok(query) => {
-                        let m = channel.send_message(&ctx, |m| {
-                            m.embed(|mut e| {
-                                e = e.title("Running query...");
-                                e = e.description(format!("```sql\n{query:#}\n```"));
-                                e.author(|a| {
-                                    a.name(&event.user.name).icon_url(event.user.avatar_url().unwrap_or_default())
-                                })
-                            })
-                        }).await?;
+                        debug!(query = ?query, "Parsed big query successfully");
                         let conn = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
-                        let result = conn.db.query(query).await;    
-                        let reply = match process(conn.pretty, conn.json, result) {
-                            Ok(r) => r,
-                            Err(e) => e.to_string(),
-                        };
-                    
-                        respond(reply, ctx.clone(), m, &conn, *channel).await?;
-                        return Ok(())
+                        conn.query(&ctx, channel, &event.user, query).await?;
                     },
-                    Err(e) => {
+                    Err(err) => {
+                        debug!(err = ?err, "Failed to parse big query");
                         event.create_interaction_response(&ctx, |r| {
                             r.interaction_response_data(|d| {
-                                d.ephemeral(true).content(format!(":warning: Failed to parse query:\n```sql\n{}\n```", e))
+                                d.ephemeral(true).embed(|e| {
+                                    e.title("Failed to parse query").description(format!("```sql\n{err:#}```")).color(0xff0000)
+                                })
                             })
                         }).await?;
                         return Ok(())
@@ -171,7 +203,32 @@ pub async fn handle_session_modal(ctx: &Context, event: &ModalSubmitInteraction,
         },
         "rename_thread" => {
             if let ActionRowComponent::InputText(InputText{value, ..}) = &values[0].components[0] {
-
+                let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
+                if value == &channel_name {
+                    event.create_interaction_response(&ctx, |r| {
+                        r.interaction_response_data(|d| {
+                            d.ephemeral(true).content("The new name is the same as the old name!")
+                        })
+                    }).await?;
+                    return Ok(())
+                }
+                info!(old_name = %channel_name, new_name = %value, "Renaming thread");
+                channel.edit(&ctx, |c| {
+                    c.name(value)
+                }).await?;
+                event.create_interaction_response(&ctx, |r| {
+                    r.interaction_response_data(|d| {
+                        d.embed(|e| {
+                            e
+                            .title("Thread renamed")
+                            .description(format!("The thread has been renamed to `{}`", value))
+                            .color(0x00ff00)
+                            .author(|a| {
+                                a.name(&event.user.name).icon_url(event.user.avatar_url().unwrap_or_default())
+                            })
+                        })
+                    })
+                }).await?;
             }
         }
         _ => {
