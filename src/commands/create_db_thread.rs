@@ -39,8 +39,7 @@ pub async fn run(
 
             let db = create_db_instance(&config).await?;
 
-            // channel.say(&ctx, format!(":information_source: This public thread is now connected to a SurrealDB instance. Try writing some SurrealQL! \nIf you want, you can use `/load` to load a premade dataset or your own SurrealQL from a file. \n_Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await?;
-            show_configurable_session(&ctx, &channel, crate::ConnType::Thread, config.ttl).await?;
+            show_configurable_session(&ctx, &channel, crate::ConnType::Thread, &config).await?;
             interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
 
             register_db(ctx, db, channel, config, crate::ConnType::Thread, true).await?;

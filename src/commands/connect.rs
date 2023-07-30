@@ -10,6 +10,7 @@ use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 use tracing::Instrument;
 
+use crate::components::show_configurable_session;
 use crate::{premade, utils::*, DBCONNS};
 
 use crate::config::Config;
@@ -81,6 +82,7 @@ pub async fn run(
                                         "surreal_deal_mini.surql",
                                         "Surreal deal (mini)",
                                         Some("surreal_deal.png"),
+                                        &config,
                                     )
                                     .await?;
                                 }
@@ -93,6 +95,7 @@ pub async fn run(
                                         "surreal_deal.surql",
                                         "Surreal deal",
                                         Some("surreal_deal.png"),
+                                        &config,
                                     )
                                     .await?;
                                 }
@@ -107,7 +110,10 @@ pub async fn run(
                                 }
                             }
                         }
-                        CommandOptionType::Attachment => load_attachment(op_option, command, ctx, db, channel).await?,
+                        CommandOptionType::Attachment => {
+                            show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
+                            load_attachment(op_option, command, ctx, db, channel).await?
+                        },
                         _ => {
                             interaction_reply_ephemeral(command, ctx, ":x: Unsupported option type")
                                 .await?;
@@ -115,7 +121,10 @@ pub async fn run(
                         }
                     }
                 }
-                Ordering::Less => interaction_reply(command, ctx, format!(":information_source: This channel is now connected to a SurrealDB instance, try writing some SurrealQL with the `/query` command! \n_Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await?,
+                Ordering::Less => {
+                    show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
+                    interaction_reply_ephemeral(command, ctx, ":information_source: Your session is now available!").await?
+                },
             };
             Ok(())
         }
@@ -152,8 +161,10 @@ async fn load_premade(
     file_name: &'static str,
     name: &'static str,
     schema_name: Option<&'static str>,
+    config: &Config,
 ) -> Result<(), anyhow::Error> {
     {
+        show_configurable_session(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
         interaction_reply(
             command,
             ctx.clone(),

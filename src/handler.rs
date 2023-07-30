@@ -143,8 +143,10 @@ impl EventHandler for Handler {
                         Some(("configurable_session", id)) => {
                             crate::components::handle_session_component(
                                 &ctx,
+                                &event,
                                 &event.channel_id,
                                 &id,
+                                &event.data.values,
                             )
                             .await
                         }
@@ -154,6 +156,40 @@ impl EventHandler for Handler {
                     if let Err(why) = res {
                         event.delete_original_interaction_response(&ctx).await.ok();
                         warn!(error = %why, "Failed to process component interaction");
+                    }
+                }
+                .instrument(span)
+                .await;
+            }
+            Interaction::ModalSubmit(modal) => {
+                let span = span!(
+                    Level::DEBUG,
+                    "modal_submit",
+                    interaction_id = modal.id.0,
+                    guild_id = %modal.guild_id.unwrap_or_default(),
+                    channel_id = %modal.channel_id,
+                    user = %modal.user,
+                    component_id = %modal.data.custom_id
+                );
+                async move {
+                    trace!(modal = ?modal, "received modal submit interaction");
+                    let res = match modal.data.custom_id.split_once(':') {
+                        Some(("configurable_session", id)) => {
+                            crate::components::handle_session_modal(
+                                &ctx,
+                                &modal,
+                                &modal.channel_id,
+                                &id,
+                                &modal.data.components,
+                            )
+                            .await
+                        }
+                        _ => Ok(()),
+                    };
+
+                    if let Err(why) = res {
+                        modal.delete_original_interaction_response(&ctx).await.ok();
+                        warn!(error = %why, "Failed to process modal submit interaction");
                     }
                 }
                 .instrument(span)

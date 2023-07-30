@@ -12,6 +12,7 @@ use serenity::prelude::Context;
 use serenity::{builder::CreateApplicationCommand, model::prelude::ChannelType};
 use tracing::Instrument;
 
+use crate::components::show_configurable_session;
 use crate::{premade, utils::*};
 
 use crate::config::Config;
@@ -80,6 +81,8 @@ pub async fn run(
                 .unwrap();
             let db = create_db_instance(&config).await?;
 
+            let config_clone = config.clone();
+
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
                     interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one argument (you can use the up arrow to edit the previous command)").await?;
@@ -96,9 +99,9 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
+                                        show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                         db.import("premade/surreal_deal_mini.surql").await.unwrap();
-                                        channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with the Surreal deal (mini) dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
+                                        channel.say(&ctx, format!("<@{}> Your instance now has Surreal deal (mini) dataset loaded, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
                                             .send_files(
                                                 ctx,
@@ -117,9 +120,9 @@ pub async fn run(
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
                                     tokio::spawn(async move {
-                                        channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
+                                        show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                         db.import("premade/surreal_deal.surql").await.unwrap();
-                                        channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with the Surreal deal dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
+                                        channel.say(&ctx, format!("<@{}> Your instance now has Surreal deal dataset loaded, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                         channel
                                             .send_files(
                                                 ctx,
@@ -157,7 +160,7 @@ pub async fn run(
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
                                         tokio::spawn(async move {
-                                            channel.say(&ctx, format!("## :information_source: This channel is now connected to a SurrealDB instance which is loading data, it will be ready to query soon!\n## _Please note this channel will expire after {:#?} of inactivity._", config.ttl)).await.unwrap();
+                                            show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await.unwrap();
                                             if let Err(why) = db
                                                 .query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
@@ -173,7 +176,7 @@ pub async fn run(
                                                 channel.delete(ctx).await.ok();
                                                 return;
                                             }
-                                            channel.say(&ctx, format!("<@{}> This channel is now connected to a SurrealDB instance with your dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
+                                            channel.say(&ctx, format!("<@{}> Your instance now has your dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
                                             interaction_reply_edit(
                                                 &command,
                                                 ctx,
@@ -211,7 +214,7 @@ pub async fn run(
                     }
                 }
                 Ordering::Less => {
-                    channel.say(&ctx, format!(":information_source: This channel is now connected to a SurrealDB instance, try writing some SurrealQL! \n_Please note this channel will expire after {:#?} of inactivity_", config.ttl)).await?;
+                    show_configurable_session(&ctx, &channel, crate::ConnType::EphemeralChannel, &config_clone).await?;
                     interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance, head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
                 }
             };
