@@ -283,7 +283,6 @@ pub async fn register_db(
                         ttl = e.ttl
                     }
                     None => {
-                        clean_channel(channel, &ctx).await;
                         break;
                     }
                 }
