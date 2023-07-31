@@ -93,6 +93,7 @@ impl Conn {
             .send_message(&ctx, |mut m| {
                 m = m
                     .embed(|mut e| {
+                        // Update copy_big_query handler if this is changed.
                         e = e.title("Query sent");
                         e = e.description(format!("```sql\n{query:#}\n```"));
                         e.author(|a| {
@@ -104,15 +105,21 @@ impl Conn {
                         c.create_action_row(|r| {
                             r.create_button(|b| {
                                 b.custom_id("configurable_session:big_query")
-                                    .label("Another Big Query please")
+                                    .label("New Big Query please")
                                     .style(Primary)
                                     .emoji('📝')
+                            }).create_button(|b| {
+                                b.custom_id("configurable_session:copy_big_query")
+                                    .label("Copy this Big Query")
+                                    .style(Primary)
+                                    .emoji('🔁')
                             })
                         })
                     });
                 if let Some(vars) = &vars {
                     m.add_embed(|mut e| {
-                        e = e.title("Query variables");
+                        // Update copy_big_query handler if this is changed.
+                        e = e.title("Variables sent");
                         e = e.description(format!(
                             "```json\n{:#}\n```",
                             serde_json::to_string_pretty(&vars).unwrap_or_default()

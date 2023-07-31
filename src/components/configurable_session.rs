@@ -1,6 +1,11 @@
+use std::borrow::Cow;
+
 use crate::{
     config::Config,
-    utils::{clean_channel, success_user_interaction, failure_ephemeral_interaction, success_ephemeral_interaction},
+    utils::{
+        clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
+        success_user_interaction,
+    },
     ConnType, DB, DBCONNS,
 };
 
@@ -177,9 +182,38 @@ pub async fn handle_component(
             )
             .await;
         }
-        ("big_query", true) => {
-            // TODO: We could keep a hashmap of user's queries and variables when they submit them,
-            // and set the valuess to the last submitted value, so that they don't have to retype it
+        ("big_query", true) | ("copy_big_query", true) => {
+            let (query, vars) = if id == "big_query" {
+                (Cow::Borrowed(""), Cow::Borrowed(""))
+            } else {
+                let (mut query, mut vars) = (String::new(), String::new());
+                for embed in &event.message.embeds {
+                    // TODO: maybe improve this "parsing" of query and vars
+                    match embed.title {
+                        Some(ref title) if title == "Query sent" => {
+                            query = embed
+                                .description
+                                .clone()
+                                .unwrap_or_default()
+                                .replace("```sql\n", "")
+                                .replace("\n```", "")
+                                .to_string();
+                        }
+                        Some(ref title) if title == "Variables sent" => {
+                            vars = embed
+                                .description
+                                .clone()
+                                .unwrap_or_default()
+                                .replace("```json\n", "")
+                                .replace("\n```", "")
+                                .to_string();
+                        }
+                        _ => {}
+                    }
+                }
+                (Cow::Owned(query), Cow::Owned(vars))
+            };
+
             event
                 .create_interaction_response(&ctx, |a| {
                     a.kind(Modal).interaction_response_data(|d| {
@@ -187,23 +221,26 @@ pub async fn handle_component(
                             c.create_action_row(|r| {
                                 r.create_input_text(|i| {
                                     i.custom_id("configurable_session:big_query")
-                                        .label("Big query (ignore errors from submit)")
+                                        .label("Big query")
                                         .style(Paragraph)
                                         .placeholder("Your Surreal query")
                                         .required(true)
+                                        .value(query)
                                 })
                             })
                             .create_action_row(|r| {
                                 r.create_input_text(|i| {
                                     i.custom_id("configurable_session:big_query_variables")
-                                        .label("Variables")
+                                        .label("Variables (as JSON)")
                                         .style(Paragraph)
                                         .placeholder("Your Surreal variables (as JSON)")
+                                        .required(false)
+                                        .value(vars)
                                 })
                             })
                         })
                         .custom_id("configurable_session:big_query")
-                        .title("Big query editor")
+                        .title("Big Query editor")
                     })
                 })
                 .await?;
@@ -282,7 +319,9 @@ pub async fn handle_modal(
                             .expect("DB disappeared between now and modal opening")
                             .clone();
                         let vars = match &values[1].components[0] {
-                            ActionRowComponent::InputText(InputText { value, .. }) => {
+                            ActionRowComponent::InputText(InputText { value, .. })
+                                if !value.is_empty() =>
+                            {
                                 match serde_json::from_str(value) {
                                     Ok(vars) => Some(vars),
                                     Err(err) => {
@@ -301,6 +340,14 @@ pub async fn handle_modal(
                             }
                             _ => None,
                         };
+                        // Gotta send a response interaction to let modal know we're processing the query
+                        success_ephemeral_interaction(
+                            &ctx,
+                            &event.id,
+                            &event.token,
+                            "Big query processing...",
+                            "Your query has been sent to the database and is processing now...",
+                        ).await?;
                         conn.query(&ctx, channel, &event.user, query, vars).await?;
                     }
                     Err(err) => {
