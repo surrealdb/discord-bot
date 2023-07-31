@@ -1,14 +1,17 @@
 use std::{cmp::Ordering, env, path::Path};
 
 use serenity::{
+    builder::CreateInteractionResponse,
+    json::{self, Value},
     model::{
         prelude::{
             application_command::{
                 ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
             },
-            AttachmentType, ChannelId, GuildChannel, InteractionResponseType, Message,
-            PermissionOverwrite, PermissionOverwriteType,
+            AttachmentType, ChannelId, GuildChannel, InteractionId, InteractionResponseType,
+            Message, PermissionOverwrite, PermissionOverwriteType,
         },
+        user::User,
         Permissions,
     },
     prelude::Context,
@@ -75,6 +78,85 @@ pub async fn interaction_followup(
 ) -> Result<(), anyhow::Error> {
     command
         .create_followup_message(&ctx.http, |response| response.content(content))
+        .await?;
+    Ok(())
+}
+
+/// Interaction-source independent function to create a success interaction message.
+pub async fn success_ephemeral_interaction<DT: ToString, DD: ToString>(
+    ctx: &Context,
+    iid: &InteractionId,
+    token: &str,
+    title: DT,
+    description: DD,
+) -> Result<(), anyhow::Error> {
+    let mut interaction_response = CreateInteractionResponse::default();
+    interaction_response.interaction_response_data(|d| {
+        d.embed(|e| {
+            e.title(title.to_string())
+                .description(description.to_string())
+                .color(0x00ff00)
+        })
+        .ephemeral(true)
+    });
+
+    let map = json::hashmap_to_json_map(interaction_response.0);
+    ctx.http
+        .create_interaction_response(iid.0, token, &Value::from(map))
+        .await?;
+    Ok(())
+}
+
+/// Interaction-source independent function to create a failure interaction message.
+pub async fn failure_ephemeral_interaction<DT: ToString, DD: ToString>(
+    ctx: &Context,
+    iid: &InteractionId,
+    token: &str,
+    title: DT,
+    description: DD,
+) -> Result<(), anyhow::Error> {
+    let mut interaction_response = CreateInteractionResponse::default();
+    interaction_response.interaction_response_data(|d| {
+        d.embed(|e| {
+            e.title(title.to_string())
+                .description(description.to_string())
+                .color(0xff0000)
+        })
+        .ephemeral(true)
+    });
+
+    let map = json::hashmap_to_json_map(interaction_response.0);
+    ctx.http
+        .create_interaction_response(iid.0, token, &Value::from(map))
+        .await?;
+    Ok(())
+}
+
+/// Interaction-source independent function to create a logged success interaction message for a specific user.
+pub async fn success_user_interaction<DT: ToString, DD: ToString>(
+    ctx: &Context,
+    iid: &InteractionId,
+    token: &str,
+    user: &User,
+    title: DT,
+    description: DD,
+) -> Result<(), anyhow::Error> {
+    let mut interaction_response = CreateInteractionResponse::default();
+    interaction_response.interaction_response_data(|d| {
+        d.embed(|e| {
+            e.title(title.to_string())
+                .description(description.to_string())
+                .color(0x00ff00)
+                .author(|a| {
+                    a.name(&user.name)
+                        .icon_url(user.avatar_url().unwrap_or_default())
+                })
+        })
+    });
+
+    let map = json::hashmap_to_json_map(interaction_response.0);
+    ctx.http
+        .create_interaction_response(iid.0, token, &Value::from(map))
         .await?;
     Ok(())
 }

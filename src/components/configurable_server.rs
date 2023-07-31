@@ -1,4 +1,7 @@
-use crate::{config::Config, utils::clean_channel, ConnType, DB, DBCONNS};
+use crate::{
+    config::Config,
+    utils::{failure_ephemeral_interaction, success_ephemeral_interaction}, DB,
+};
 
 use anyhow::Result;
 use humantime::format_duration;
@@ -6,22 +9,21 @@ use serenity::{
     model::prelude::{
         component::{
             ActionRow, ActionRowComponent,
-            ButtonStyle::{Danger, Primary, Secondary, Success},
+            ButtonStyle::Success,
             InputText,
-            InputTextStyle::{Paragraph, Short},
+            InputTextStyle::Short,
         },
         message_component::MessageComponentInteraction,
         modal::ModalSubmitInteraction,
-        ChannelId, GuildChannel, GuildId,
+        ChannelId, GuildId,
         InteractionResponseType::Modal,
-        ReactionType,
     },
     prelude::{Context, Mentionable},
 };
 
 pub async fn show(ctx: &Context, channel: &ChannelId, config: &Config) -> Result<()> {
     let version = DB.version().await?;
-    
+
     channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
@@ -72,51 +74,54 @@ pub async fn handle_component(
     id: &str,
     values: &[String],
 ) -> Result<()> {
-    if !event.member.as_ref().unwrap().permissions.unwrap().manage_channels() {
+    if !event
+        .member
+        .as_ref()
+        .ok_or(anyhow::anyhow!("Not in a guild"))?
+        .permissions
+        .expect("we are in an interaction")
+        .manage_channels()
+    {
         info!("User tried to change config, but has no permissions");
-        event.create_interaction_response(&ctx, |a| {
-            a.interaction_response_data(|d| {
-                d.embed(|e| {
-                    e.title("No permissions!")
-                     .description("You need to have `Manage Channels` permission to change the server config!")
-                     .color(0xff0000)
-                }).ephemeral(true)
-            })
-        }).await?;
+        failure_ephemeral_interaction(
+            &ctx,
+            &event.id,
+            &event.token,
+            "No permissions!",
+            "You need to have `Manage Channels` permission to change the server config!",
+        )
+        .await?;
         return Ok(());
     }
 
-    let result: Result<Option<Config>, surrealdb::Error> = DB
-        .select(("guild_config", guild.to_string()))
-        .await;
+    let result: Result<Option<Config>, surrealdb::Error> =
+        DB.select(("guild_config", guild.to_string())).await;
 
     let mut dirty = false;
 
     match (id, result) {
         (_, Ok(None)) => {
             info!("Tried to change config, but there is no config for this server.");
-            event.create_interaction_response(&ctx, |a| {
-                a.interaction_response_data(|d| {
-                    d.embed(|e| {
-                        e.title("No config!")
-                         .description("There is no config for this server!\nPlease run `/configure` with initial settings!")
-                         .color(0xff0000)
-                    }).ephemeral(true)
-                })
-            }).await?;
+            failure_ephemeral_interaction(
+                &ctx,
+                &event.id,
+                &event.token,
+                "No config!",
+                "There is no config for this server!\nPlease run `/configure` with initial settings!",
+            )
+            .await?;
             return Ok(());
         }
         (_, Err(err)) => {
             error!("Error while getting config: {}", err);
-            event.create_interaction_response(&ctx, |a| {
-                a.interaction_response_data(|d| {
-                    d.embed(|e| {
-                        e.title("Error!")
-                         .description(format!("Error while getting config:\n ```rust\n{err}\n```"))
-                         .color(0xff0000)
-                    }).ephemeral(true)
-                })
-            }).await?;
+            failure_ephemeral_interaction(
+                &ctx,
+                &event.id,
+                &event.token,
+                "Error!",
+                format!("Error while getting config:\n ```rust\n{err}\n```"),
+            )
+            .await?;
             return Ok(());
         }
         ("ttl", Ok(Some(config))) | ("timeout", Ok(Some(config))) => {
@@ -160,36 +165,32 @@ pub async fn handle_component(
             match updated {
                 Ok(Some(_)) => {
                     dirty = true;
-                    event
-                        .create_interaction_response(&ctx, |r| {
-                            r.interaction_response_data(|d| {
-                                d.embed(|e| {
-                                    e.title("Config updated")
-                                        .description(format!("{} is now set to {}", id, values[0]))
-                                        .color(0x00ff00)
-                                })
-                                .ephemeral(true)
-                            })
-                        })
-                        .await?;
+                    success_ephemeral_interaction(
+                        &ctx,
+                        &event.id,
+                        &event.token,
+                        "Config updated!",
+                        format!("{} is now set to {}", id, values[0]),
+                    )
+                    .await?;
                 }
                 Ok(None) => {
-                    unreachable!("Update returned None even though it should have always returned Some")
+                    unreachable!(
+                        "Update returned None even though it should have always returned Some"
+                    )
                 }
                 Err(err) => {
                     error!("Error while updating config: {}", err);
-                    event.create_interaction_response(&ctx, |a| {
-                        a.interaction_response_data(|d| {
-                            d.embed(|e| {
-                                e.title("Error!")
-                                 .description(format!("Error while updating config:\n ```rust\n{err}\n```"))
-                                 .color(0xff0000)
-                            }).ephemeral(true)
-                        })
-                    }).await?;
+                    failure_ephemeral_interaction(
+                        &ctx,
+                        &event.id,
+                        &event.token,
+                        "Error!",
+                        format!("Error while updating config:\n ```rust\n{err}\n```"),
+                    )
+                    .await?;
                 }
             }
-
         }
         (_, _) => {
             unreachable!()
@@ -198,15 +199,14 @@ pub async fn handle_component(
 
     // If we changed something, delete the original message and show a new one
     if dirty {
-        let result: Result<Option<Config>, surrealdb::Error> = DB
-            .select(("guild_config", guild.to_string()))
-            .await;
+        let result: Result<Option<Config>, surrealdb::Error> =
+            DB.select(("guild_config", guild.to_string())).await;
         match result {
             Ok(Some(config)) => {
                 event.message.delete(&ctx).await?;
                 show(&ctx, &event.channel_id, &config).await?;
-            },
-            _ => unreachable!("Should've returned long before...")
+            }
+            _ => unreachable!("Should've returned long before..."),
         }
     }
     Ok(())
@@ -220,5 +220,78 @@ pub async fn handle_modal(
     id: &str,
     values: &[ActionRow],
 ) -> Result<()> {
+    match id {
+        // Use humantime.parse_duration to parse component values.
+        "ttl" | "timeout" => {
+            if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
+            {
+                let duration = match humantime::parse_duration(value) {
+                    Ok(duration) => duration,
+                    Err(err) => {
+                        error!("Error while parsing duration: {}", err);
+                        failure_ephemeral_interaction(
+                            &ctx,
+                            &event.id,
+                            &event.token,
+                            "Error while parsing duration",
+                            format!("Error while parsing duration:\n ```rust\n{err}\n```"),
+                        )
+                        .await?;
+                        return Ok(());
+                    }
+                };
+                let result: Result<Option<Config>, surrealdb::Error> =
+                    DB.select(("guild_config", guild.to_string())).await;
+                match result {
+                    Ok(Some(mut config)) => {
+                        match id {
+                            "ttl" => config.ttl = duration,
+                            "timeout" => config.timeout = duration,
+                            _ => unreachable!(),
+                        }
+                        let updated: Result<Option<Config>, surrealdb::Error> = DB
+                            .update(("guild_config", guild.to_string()))
+                            .content(config)
+                            .await;
+                        match updated {
+                            Ok(Some(_)) => {
+                                success_ephemeral_interaction(
+                                    &ctx,
+                                    &event.id,
+                                    &event.token,
+                                    "Config updated",
+                                    format!(
+                                        "{} is now set to {}",
+                                        id,
+                                        humantime::format_duration(duration),
+                                    ),
+                                )
+                                .await?;
+                            }
+                            Ok(None) => {
+                                unreachable!(
+                                    "Update returned None even though it should have always returned Some"
+                                )
+                            }
+                            Err(err) => {
+                                error!("Error while updating config: {}", err);
+                                failure_ephemeral_interaction(
+                                    &ctx,
+                                    &event.id,
+                                    &event.token,
+                                    "Error!",
+                                    format!("Error while updating config:\n ```rust\n{err}\n```"),
+                                )
+                                .await?;
+                            }
+                        }
+                    }
+                    _ => unreachable!("Should've returned long before..."),
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+
     Ok(())
 }

@@ -1,4 +1,8 @@
-use crate::{config::Config, utils::clean_channel, ConnType, DB, DBCONNS};
+use crate::{
+    config::Config,
+    utils::{clean_channel, success_user_interaction, failure_ephemeral_interaction, success_ephemeral_interaction},
+    ConnType, DB, DBCONNS,
+};
 
 use anyhow::Result;
 use humantime::format_duration;
@@ -92,7 +96,12 @@ pub async fn handle_component(
     match (id, db_exists) {
         ("format", true) | ("prettify", true) | ("require_query", true) => {
             debug!("Updating config");
-            let mut db = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
+            let mut db = DBCONNS
+                .lock()
+                .await
+                .get_mut(&channel.0)
+                .expect("DB disappeared between now above check")
+                .clone();
             match id {
                 "format" => db.json = values[0] == "json",
                 "prettify" => db.pretty = values[0] == "true",
@@ -100,23 +109,29 @@ pub async fn handle_component(
                 _ => unreachable!(),
             }
             DBCONNS.lock().await.insert(channel.0, db);
-            event
-                .create_interaction_response(&ctx, |r| {
-                    r.interaction_response_data(|d| {
-                        d.embed(|e| {
-                            e.title("Config updated")
-                                .description(format!("{} is now set to {}", id, values[0]))
-                                .color(0x00ff00)
-                        })
-                        .ephemeral(true)
-                    })
-                })
-                .await?;
+            success_ephemeral_interaction(
+                &ctx,
+                &event.id,
+                &event.token,
+                "Config updated",
+                format!("{} is now set to {}", id, values[0]),
+            )
+            .await?;
         }
         ("export", true) => {
             debug!("Exporting database");
-            let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
-            let conn = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
+            let channel_name = channel
+                .to_channel(&ctx)
+                .await?
+                .guild()
+                .expect("our components are only available in guilds")
+                .name;
+            let conn = DBCONNS
+                .lock()
+                .await
+                .get_mut(&channel.0)
+                .expect("DB disappeared between now above check")
+                .clone();
             match conn.export(&channel_name).await {
                 Ok(Some(path)) => {
                     event.create_interaction_response(&ctx, |r| {
@@ -129,40 +144,42 @@ pub async fn handle_component(
                     tokio::fs::remove_file(path).await?;
                 }
                 Ok(None) => {
-                    event
-                        .create_interaction_response(&ctx, |r| {
-                            r.interaction_response_data(|d| {
-                                d.embed(|e| {
-                                    e.title("Failed to export")
-                                        .description("Export was too big...")
-                                        .color(0xff0000)
-                                })
-                                .ephemeral(true)
-                            })
-                        })
-                        .await?;
+                    failure_ephemeral_interaction(
+                        &ctx,
+                        &event.id,
+                        &event.token,
+                        "Failed to export",
+                        "Export was too big...",
+                    )
+                    .await?;
                 }
                 Err(err) => {
-                    event
-                        .create_interaction_response(&ctx, |r| {
-                            r.interaction_response_data(|d| {
-                                d.embed(|e| {
-                                    e.title("Failed to export")
-                                        .description(format!("{err:#?}"))
-                                        .color(0xff0000)
-                                })
-                                .ephemeral(true)
-                            })
-                        })
-                        .await?;
+                    failure_ephemeral_interaction(
+                        &ctx,
+                        &event.id,
+                        &event.token,
+                        "Failed to export",
+                        format!("{err:#?}"),
+                    )
+                    .await?;
                 }
             }
         }
         ("stop", true) => {
             debug!("Stopping session per user request");
-            clean_channel(channel.to_channel(&ctx).await?.guild().unwrap(), &ctx).await;
+            clean_channel(
+                channel
+                    .to_channel(&ctx)
+                    .await?
+                    .guild()
+                    .expect("our components are only available in guilds"),
+                &ctx,
+            )
+            .await;
         }
         ("big_query", true) => {
+            // TODO: We could keep a hashmap of user's queries and variables when they submit them,
+            // and set the valuess to the last submitted value, so that they don't have to retype it
             event
                 .create_interaction_response(&ctx, |a| {
                     a.kind(Modal).interaction_response_data(|d| {
@@ -176,6 +193,14 @@ pub async fn handle_component(
                                         .required(true)
                                 })
                             })
+                            .create_action_row(|r| {
+                                r.create_input_text(|i| {
+                                    i.custom_id("configurable_session:big_query_variables")
+                                        .label("Variables")
+                                        .style(Paragraph)
+                                        .placeholder("Your Surreal variables (as JSON)")
+                                })
+                            })
                         })
                         .custom_id("configurable_session:big_query")
                         .title("Big query editor")
@@ -187,7 +212,12 @@ pub async fn handle_component(
             // TODO: feature creep but maybe a button to re-create a session after it's been deleted
         }
         ("rename_thread", _) => {
-            let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
+            let channel_name = channel
+                .to_channel(&ctx)
+                .await?
+                .guild()
+                .expect("our components are only available in guilds")
+                .name;
             event
                 .create_interaction_response(&ctx, |a| {
                     a.kind(Modal).interaction_response_data(|d| {
@@ -213,15 +243,14 @@ pub async fn handle_component(
         }
         (_, false) => {
             info!("No connection found for channel");
-            event.create_interaction_response(&ctx, |a| {
-                a.interaction_response_data(|d| {
-                    d.embed(|e| {
-                        e.title("Session expired or terminated")
-                         .description("There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.")
-                         .color(0xff0000)
-                    }).ephemeral(true)
-                })
-            }).await?;
+            failure_ephemeral_interaction(
+                &ctx,
+                &event.id,
+                &event.token,
+                "Session expired or terminated",
+                "There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.",
+            )
+            .await?;
         }
         _ => {
             warn!(sub_id = id, "Unknown configurable_session component");
@@ -246,22 +275,44 @@ pub async fn handle_modal(
                 match surrealdb::sql::parse(&value) {
                     Ok(query) => {
                         debug!(query = ?query, "Parsed big query successfully");
-                        let conn = DBCONNS.lock().await.get_mut(&channel.0).unwrap().clone();
-                        conn.query(&ctx, channel, &event.user, query).await?;
+                        let conn = DBCONNS
+                            .lock()
+                            .await
+                            .get_mut(&channel.0)
+                            .expect("DB disappeared between now and modal opening")
+                            .clone();
+                        let vars = match &values[1].components[0] {
+                            ActionRowComponent::InputText(InputText { value, .. }) => {
+                                match serde_json::from_str(value) {
+                                    Ok(vars) => Some(vars),
+                                    Err(err) => {
+                                        debug!(err = ?err, "Failed to parse variables");
+                                        failure_ephemeral_interaction(
+                                            &ctx,
+                                            &event.id,
+                                            &event.token,
+                                            "Failed to parse big query variables!",
+                                            format!("```rust\n{err:#}```"),
+                                        )
+                                        .await?;
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            _ => None,
+                        };
+                        conn.query(&ctx, channel, &event.user, query, vars).await?;
                     }
                     Err(err) => {
                         debug!(err = ?err, "Failed to parse big query");
-                        event
-                            .create_interaction_response(&ctx, |r| {
-                                r.interaction_response_data(|d| {
-                                    d.ephemeral(true).embed(|e| {
-                                        e.title("Failed to parse query")
-                                            .description(format!("```sql\n{err:#}```"))
-                                            .color(0xff0000)
-                                    })
-                                })
-                            })
-                            .await?;
+                        failure_ephemeral_interaction(
+                            &ctx,
+                            &event.id,
+                            &event.token,
+                            "Failed to parse big query!",
+                            format!("```sql\n{err:#}```"),
+                        )
+                        .await?;
                         return Ok(());
                     }
                 }
@@ -270,38 +321,34 @@ pub async fn handle_modal(
         "rename_thread" => {
             if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
             {
-                let channel_name = channel.to_channel(&ctx).await?.guild().unwrap().name;
+                let channel_name = channel
+                    .to_channel(&ctx)
+                    .await?
+                    .guild()
+                    .expect("our components are only available in guilds")
+                    .name;
                 if value == &channel_name {
-                    event
-                        .create_interaction_response(&ctx, |r| {
-                            r.interaction_response_data(|d| {
-                                d.ephemeral(true)
-                                    .content("The new name is the same as the old name!")
-                            })
-                        })
-                        .await?;
+                    failure_ephemeral_interaction(
+                        &ctx,
+                        &event.id,
+                        &event.token,
+                        "Failed to rename thread!",
+                        "The new name is the same as the old name.",
+                    )
+                    .await?;
                     return Ok(());
                 }
                 info!(old_name = %channel_name, new_name = %value, "Renaming thread");
                 channel.edit(&ctx, |c| c.name(value)).await?;
-                event
-                    .create_interaction_response(&ctx, |r| {
-                        r.interaction_response_data(|d| {
-                            d.embed(|e| {
-                                e.title("Thread renamed")
-                                    .description(format!(
-                                        "The thread has been renamed to `{}`",
-                                        value
-                                    ))
-                                    .color(0x00ff00)
-                                    .author(|a| {
-                                        a.name(&event.user.name)
-                                            .icon_url(event.user.avatar_url().unwrap_or_default())
-                                    })
-                            })
-                        })
-                    })
-                    .await?;
+                success_user_interaction(
+                    &ctx,
+                    &event.id,
+                    &event.token,
+                    &event.user,
+                    "Thread renamed",
+                    format!("The thread has been renamed to `{value}`"),
+                )
+                .await?;
             }
         }
         _ => {

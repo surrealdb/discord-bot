@@ -9,12 +9,14 @@ pub mod utils;
 
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
-use serenity::model::prelude::{AttachmentType, ChannelId};
-use serenity::model::user::User;
-use serenity::prelude::Context;
-use surrealdb::opt::IntoQuery;
-use surrealdb::Error;
-use surrealdb::{sql::Value, Response};
+use serenity::{
+    model::{
+        prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
+        user::User,
+    },
+    prelude::Context,
+};
+use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 use utils::MAX_FILE_SIZE;
@@ -85,20 +87,50 @@ impl Conn {
         channel: &ChannelId,
         user: &User,
         query: impl IntoQuery + std::fmt::Display,
+        vars: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<(), anyhow::Error> {
         let query_message = channel
-            .send_message(&ctx, |m| {
-                m.embed(|mut e| {
-                    e = e.title("Running query...");
-                    e = e.description(format!("```sql\n{query:#}\n```"));
-                    e.author(|a| {
-                        a.name(&user.name)
-                            .icon_url(user.avatar_url().unwrap_or_default())
+            .send_message(&ctx, |mut m| {
+                m = m
+                    .embed(|mut e| {
+                        e = e.title("Query sent");
+                        e = e.description(format!("```sql\n{query:#}\n```"));
+                        e.author(|a| {
+                            a.name(&user.name)
+                                .icon_url(user.avatar_url().unwrap_or_default())
+                        })
                     })
-                })
+                    .components(|c| {
+                        c.create_action_row(|r| {
+                            r.create_button(|b| {
+                                b.custom_id("configurable_session:big_query")
+                                    .label("Another Big Query please")
+                                    .style(Primary)
+                                    .emoji('📝')
+                            })
+                        })
+                    });
+                if let Some(vars) = &vars {
+                    m.add_embed(|mut e| {
+                        e = e.title("Query variables");
+                        e = e.description(format!(
+                            "```json\n{:#}\n```",
+                            serde_json::to_string_pretty(&vars).unwrap_or_default()
+                        ));
+                        e
+                    })
+                } else {
+                    m
+                }
             })
             .await?;
-        let result = self.db.query(query).await;
+        let mut query = self.db.query(query);
+        if let Some(vars) = vars {
+            query = query.bind(vars);
+        }
+        let now = std::time::Instant::now();
+        let result = query.await;
+        let elapsed = now.elapsed();
         let reply = match process(self.pretty, self.json, result) {
             Ok(r) => r,
             Err(e) => e.to_string(),
@@ -109,11 +141,13 @@ impl Conn {
                 .send_message(&ctx, |m| {
                     m.reference_message(&query_message).embed(|mut e| {
                         e = e.title("Query result");
-                        e = e.description(format!(
-                            "```{}\n{}\n```",
-                            if self.json { "json" } else { "sql" },
-                            reply
-                        ));
+                        e = e
+                            .description(format!(
+                                "```{}\n{}\n```",
+                                if self.json { "json" } else { "sql" },
+                                reply
+                            ))
+                            .field("Query took", humantime::format_duration(elapsed), true);
                         e.author(|a| {
                             a.name(&user.name)
                                 .icon_url(user.avatar_url().unwrap_or_default())
@@ -136,16 +170,18 @@ impl Conn {
             };
             channel
                 .send_message(&ctx, |m| {
-                    let message = m
+                    m
                         .reference_message(&query_message)
-                        .add_file(reply_attachment);
-                    if truncated {
-                        message.content(
-                            ":information_source: Response was too long and has been truncated",
-                        )
-                    } else {
-                        message
-                    }
+                        .add_file(reply_attachment).embed(|mut e| {
+                            e = e.title("Query result").field("Query took", humantime::format_duration(elapsed), true);
+                            return if truncated {
+                                e.description(
+                                    ":information_source: Response was too long and has been truncated",
+                                )
+                            } else {
+                                e
+                            }
+                        })
                 })
                 .await
                 .unwrap();
