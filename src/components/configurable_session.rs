@@ -4,9 +4,9 @@ use crate::{
     config::Config,
     utils::{
         clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
-        success_user_interaction,
+        success_user_interaction, SURREALDB_VERSION,
     },
-    ConnType, DB, DBCONNS,
+    ConnType, DBCONNS,
 };
 
 use anyhow::Result;
@@ -35,7 +35,6 @@ pub async fn show(
     conn: ConnType,
     config: &Config,
 ) -> Result<()> {
-    let version = DB.version().await?;
     channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
@@ -47,7 +46,7 @@ pub async fn show(
                 ConnType::Thread => "This public thread is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
             }))
             .footer(|f| {
-                f.text(format!("SurrealDB Version: {}", version)).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                f.text(format!("Powered by SurrealDB {}", SURREALDB_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
             })
             .field("Session lifetime after last query is ", format_duration(config.ttl), true)
             .field("Query timeout is set to ", format_duration(config.timeout), true)

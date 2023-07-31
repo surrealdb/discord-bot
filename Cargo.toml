@@ -6,6 +6,7 @@ authors = ["Raphael Darley <raphael.darley@surrealdb.com>", "alyti <alticodes@gm
 
 [dependencies]
 anyhow = "1.0.71"
+cargo-lock = "9.0.0"
 dotenv = "0.15.0"
 humantime = "2.1.0"
 memorable-wordlist = "0.1.7"
