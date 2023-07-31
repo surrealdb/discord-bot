@@ -4,7 +4,7 @@ use crate::{
     config::Config,
     utils::{
         clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
-        success_user_interaction, SURREALDB_VERSION,
+        success_user_interaction, SURREALDB_VERSION, BOT_VERSION,
     },
     ConnType, DBCONNS,
 };
@@ -40,13 +40,13 @@ pub async fn show(
         .embed(|embed| {
             embed
             .title("Your SurrealDB session")
-            .description(format!("{} \n* You can use `/load` to load a premade dataset or your own SurrealQL from a file.", match conn {
+            .description(format!("{} \n* You can use `/load` to load a premade dataset or your own SurrealQL from a file.\n* You are using SurrealDB {}.", match conn {
                 ConnType::ConnectedChannel => "This channel is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
                 ConnType::EphemeralChannel => "This brand new channel is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n\n* You can use `/share` to add friends to this channel.",
                 ConnType::Thread => "This public thread is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
-            }))
+            }, SURREALDB_VERSION.as_str()))
             .footer(|f| {
-                f.text(format!("Powered by SurrealDB {}", SURREALDB_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                f.text(format!("Powered by Surreal Bot {}", BOT_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
             })
             .field("Session lifetime after last query is ", format_duration(config.ttl), true)
             .field("Query timeout is set to ", format_duration(config.timeout), true)

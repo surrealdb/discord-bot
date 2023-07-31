@@ -418,10 +418,10 @@ pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, a
     Ok(db)
 }
 
+const LOCK_FILE: &str = include_str!("../Cargo.lock");
+
 pub const SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
-    let lock: cargo_lock::Lockfile = include_str!("../Cargo.lock")
-        .parse()
-        .expect("Failed to parse Cargo.lock");
+    let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
     let package = lock
         .packages
         .iter()
@@ -430,25 +430,19 @@ pub const SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
 
     match &package.source {
         Some(source) => {
-            let kind = match source.kind() {
-                SourceKind::Git(git) => {
-                    format!(
-                        "git: {}",
-                        match git {
-                            GitReference::Branch(branch) => format!("branch: {}", branch),
-                            GitReference::Tag(tag) => format!("tag: {}", tag),
-                            GitReference::Rev(rev) => format!("rev: {}", rev),
-                        }
-                    )
-                }
-                SourceKind::Registry | SourceKind::LocalRegistry | SourceKind::SparseRegistry => {
-                    "registry".to_string()
-                }
-                SourceKind::Path => "localpath".to_string(),
-                _ => "unknown".to_string(),
-            };
-            format!("v{} ({kind})", package.version)
+            format!("v{} ({})", package.version, source)
         }
         None => "unknown".to_string(),
     }
+});
+
+pub const BOT_VERSION: Lazy<String> = Lazy::new(|| {
+    let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
+    let package = lock
+        .packages
+        .iter()
+        .find(|p| p.name.as_str() == "surreal_bot")
+        .expect("Failed to find surreal_bot in Cargo.lock");
+
+    format!("v{}", package.version)
 });

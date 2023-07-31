@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    utils::{failure_ephemeral_interaction, success_ephemeral_interaction, SURREALDB_VERSION}, DB,
+    utils::{failure_ephemeral_interaction, success_ephemeral_interaction, SURREALDB_VERSION, BOT_VERSION}, DB,
 };
 
 use anyhow::Result;
@@ -29,7 +29,7 @@ pub async fn show(ctx: &Context, channel: &ChannelId, config: &Config) -> Result
             .title("Your SurrealDB session")
             .description("This is your SurrealDB server configuration.\nYou can change it by clicking the options below.\n\nRight now active/archived channel groups can only be changed via `/config_update`.")
             .footer(|f| {
-                f.text(format!("Powered by SurrealDB {}", SURREALDB_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                f.text(format!("Powered by Surreal Bot {}", BOT_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
             })
             .field("Active Channel group is", config.active_channel.mention(), true)
             .field("Archived Channel group is", config.archive_channel.mention(), true)
