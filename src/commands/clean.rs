@@ -31,12 +31,21 @@ pub async fn run(
     let channel = match command.channel_id.to_channel(&ctx).await.unwrap() {
         Channel::Guild(c) => c,
         _ => {
-            interaction_reply_ephemeral(command, ctx, ":warning: This command only works in guild channels")
-                .await?;
+            interaction_reply_ephemeral(
+                command,
+                ctx,
+                ":warning: This command only works in guild channels",
+            )
+            .await?;
             return Ok(());
         }
     };
-    interaction_reply_ephemeral(command, ctx.clone(), ":white_check_mark: This channel should now be cleaned").await?;
+    interaction_reply_ephemeral(
+        command,
+        ctx.clone(),
+        ":white_check_mark: This channel should now be cleaned",
+    )
+    .await?;
 
     clean_channel(channel, &ctx).await;
 

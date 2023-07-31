@@ -29,7 +29,12 @@ pub async fn run(
             return Ok(());
         }
     };
-    interaction_reply(command, ctx.clone(), ":information_source: Exporting database").await?;
+    interaction_reply(
+        command,
+        ctx.clone(),
+        ":information_source: Exporting database",
+    )
+    .await?;
 
     let base_path = match env::var("TEMP_DIR_PATH") {
         Ok(p) => p,
@@ -71,7 +76,8 @@ pub async fn run(
             fs::remove_file(path).await?;
         }
         Err(why) => {
-            interaction_reply_edit(command, ctx, format!(":x: Database export failed: {why}")).await?
+            interaction_reply_edit(command, ctx, format!(":x: Database export failed: {why}"))
+                .await?
         }
     };
     Ok(())

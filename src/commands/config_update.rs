@@ -4,18 +4,18 @@ use serenity::model::Permissions;
 use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
+use crate::components::configurable_server::show;
 use crate::config;
 use crate::config::Config;
 use crate::config::ConfigBuilder;
 use crate::utils::interaction_reply;
 use crate::DB;
+use crate::utils::interaction_reply_ephemeral;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    debug!(command_options = ?command.data.options, "command options");
-
     let result: Result<Option<Config>, surrealdb::Error> = DB
         .select(("guild_config", command.guild_id.unwrap().to_string()))
         .await;
@@ -24,7 +24,7 @@ pub async fn run(
         Ok(response) => match response {
             Some(c) => {c}
 
-            None => return interaction_reply(command, ctx.clone(), format!(":warning: This server is not yet configured, use `/configure` to add initial configuration")).await,
+            None => return interaction_reply(command, ctx.clone(), ":warning: This server is not yet configured, use `/configure` to add initial configuration".to_string()).await,
         },
         Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
     };
@@ -41,23 +41,24 @@ pub async fn run(
         .content(config)
         .await;
 
-    let msg = match updated {
+    match updated {
         Ok(response) => match response {
             Some(c) => {
-                format!(":white_check_mark: This server is now configured with: {:?}", c)
+                show(&ctx, &command.channel_id, &c).await?;
+                interaction_reply_ephemeral(command, ctx, ":white_check_mark: Configuration updated successfully".to_string()).await
             }
 
             None => {
                 warn!("error updating configuration");
-                ":x: Error updating configuration".to_string()
-            },
+                interaction_reply_ephemeral(command, ctx.clone(), ":x: Error updating configuration".to_string()).await
+            }
         },
         Err(e) => {
             error!(error = %e, "database error");
-            format!(":x: Database error: {}", e)
-        },
-    };
-    interaction_reply(command, ctx.clone(), msg).await
+            interaction_reply_ephemeral(command, ctx.clone(), format!(":x: Database error: {e}")).await
+            
+        }
+    }
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {

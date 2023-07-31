@@ -1,5 +1,6 @@
 pub mod channel_info;
 pub mod commands;
+pub mod components;
 pub mod config;
 pub mod db_utils;
 pub mod handler;
@@ -8,15 +9,24 @@ pub mod utils;
 
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
-use surrealdb::Error;
-use surrealdb::{sql::Value, Response};
+use serenity::{
+    model::{
+        prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
+        user::User,
+    },
+    prelude::Context,
+};
+use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
+use utils::MAX_FILE_SIZE;
 
 #[macro_use]
 extern crate tracing;
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use surrealdb::engine::local::Db;
@@ -41,6 +51,143 @@ pub enum ConnType {
     ConnectedChannel,
     EphemeralChannel,
     Thread,
+}
+
+impl Conn {
+    #[must_use]
+    pub async fn export(&self, name: &str) -> Result<Option<PathBuf>, anyhow::Error> {
+        let base_path = match std::env::var("TEMP_DIR_PATH") {
+            Ok(p) => PathBuf::from(p),
+            Err(_) => {
+                tokio::fs::create_dir("tmp").await.ok();
+                PathBuf::from("tmp/")
+            }
+        };
+        let path = base_path.join(name).with_extension(".surql");
+
+        match self.db.export(&path).await {
+            Ok(()) => match tokio::fs::metadata(&path).await {
+                Ok(metadata) => {
+                    if metadata.len() < utils::MAX_FILE_SIZE as u64 {
+                        Ok(Some(Path::new(&path).to_owned()))
+                    } else {
+                        tokio::fs::remove_file(path).await?;
+                        Ok(None)
+                    }
+                }
+                Err(err) => Err(err.into()),
+            },
+            Err(why) => Err(why.into()),
+        }
+    }
+
+    pub async fn query(
+        &self,
+        ctx: &Context,
+        channel: &ChannelId,
+        user: &User,
+        query: impl IntoQuery + std::fmt::Display,
+        vars: Option<HashMap<String, serde_json::Value>>,
+    ) -> Result<(), anyhow::Error> {
+        let query_message = channel
+            .send_message(&ctx, |mut m| {
+                m = m
+                    .embed(|mut e| {
+                        e = e.title("Query sent");
+                        e = e.description(format!("```sql\n{query:#}\n```"));
+                        e.author(|a| {
+                            a.name(&user.name)
+                                .icon_url(user.avatar_url().unwrap_or_default())
+                        })
+                    })
+                    .components(|c| {
+                        c.create_action_row(|r| {
+                            r.create_button(|b| {
+                                b.custom_id("configurable_session:big_query")
+                                    .label("Another Big Query please")
+                                    .style(Primary)
+                                    .emoji('📝')
+                            })
+                        })
+                    });
+                if let Some(vars) = &vars {
+                    m.add_embed(|mut e| {
+                        e = e.title("Query variables");
+                        e = e.description(format!(
+                            "```json\n{:#}\n```",
+                            serde_json::to_string_pretty(&vars).unwrap_or_default()
+                        ));
+                        e
+                    })
+                } else {
+                    m
+                }
+            })
+            .await?;
+        let mut query = self.db.query(query);
+        if let Some(vars) = vars {
+            query = query.bind(vars);
+        }
+        let now = std::time::Instant::now();
+        let result = query.await;
+        let elapsed = now.elapsed();
+        let reply = match process(self.pretty, self.json, result) {
+            Ok(r) => r,
+            Err(e) => e.to_string(),
+        };
+
+        if reply.len() < 4000 {
+            channel
+                .send_message(&ctx, |m| {
+                    m.reference_message(&query_message).embed(|mut e| {
+                        e = e.title("Query result");
+                        e = e
+                            .description(format!(
+                                "```{}\n{}\n```",
+                                if self.json { "json" } else { "sql" },
+                                reply
+                            ))
+                            .field("Query took", humantime::format_duration(elapsed), true);
+                        e.author(|a| {
+                            a.name(&user.name)
+                                .icon_url(user.avatar_url().unwrap_or_default())
+                        })
+                    })
+                })
+                .await?;
+        } else {
+            let mut truncated = false;
+            let data = match reply.as_bytes().len().cmp(&MAX_FILE_SIZE) {
+                Ordering::Equal | Ordering::Less => reply.as_bytes(),
+                Ordering::Greater => {
+                    truncated = true;
+                    reply.as_bytes().split_at(MAX_FILE_SIZE).0
+                }
+            };
+            let reply_attachment = AttachmentType::Bytes {
+                data: std::borrow::Cow::Borrowed(data),
+                filename: format!("response.{}", if self.json { "json" } else { "sql" }),
+            };
+            channel
+                .send_message(&ctx, |m| {
+                    m
+                        .reference_message(&query_message)
+                        .add_file(reply_attachment).embed(|mut e| {
+                            e = e.title("Query result").field("Query took", humantime::format_duration(elapsed), true);
+                            return if truncated {
+                                e.description(
+                                    ":information_source: Response was too long and has been truncated",
+                                )
+                            } else {
+                                e
+                            }
+                        })
+                })
+                .await
+                .unwrap();
+        }
+        Ok(())
+    }
 }
 
 pub fn process(

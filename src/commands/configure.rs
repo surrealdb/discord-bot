@@ -4,6 +4,7 @@ use serenity::model::Permissions;
 use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
+use crate::components::configurable_server::show;
 use crate::config;
 use crate::config::Config;
 use crate::config::ConfigBuilder;
@@ -49,23 +50,22 @@ pub async fn run(
         .content(config)
         .await;
 
-    let msg = match created {
+    match created {
         Ok(response) => match response {
             Some(c) => {
-                format!(":information_source: This server is now configured with: {:?}", c)
+                show(&ctx, &command.channel_id, &c).await?;
+                interaction_reply_ephemeral(command, ctx, ":white_check_mark: Configuration added successfully".to_string()).await
             }
-
             None => {
                 warn!("Error adding configuration");
-                ":x: Error adding configuration".to_string()
-            },
+                interaction_reply_ephemeral(command, ctx.clone(), ":x: Error adding configuration".to_string()).await
+            }
         },
         Err(e) => {
             error!(error = %e, "database error");
-            format!(":x: Database error: {}", e)
-        },
-    };
-    interaction_reply(command, ctx.clone(), msg).await
+            interaction_reply_ephemeral(command, ctx.clone(), format!(":x: Database error: {}", e)).await
+        }
+    }
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
