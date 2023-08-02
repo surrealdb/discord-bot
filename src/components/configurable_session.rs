@@ -1,10 +1,10 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use crate::{
     config::Config,
     utils::{
         clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
-        success_user_interaction, SURREALDB_VERSION, BOT_VERSION,
+        success_user_interaction, BOT_VERSION, SURREALDB_VERSION,
     },
     ConnType, DBCONNS,
 };
@@ -27,15 +27,17 @@ use serenity::{
     },
     prelude::Context,
 };
+use tracing::Instrument;
 
 /// Send a message to the server with prebuilt components for DB channel configuration management
+#[instrument(skip(ctx, channel, conn, config))]
 pub async fn show(
     ctx: &Context,
     channel: &GuildChannel,
     conn: ConnType,
     config: &Config,
 ) -> Result<()> {
-    channel.send_message(&ctx, |message| {
+    let msg = channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
             embed
@@ -83,6 +85,39 @@ pub async fn show(
             })
         })
     }).await?;
+
+    let ctx_clone = Arc::new(ctx.clone());
+    let channel_clone = Arc::new(channel.clone());
+    let msg_clone = Arc::new(msg);
+    tokio::spawn(async move {
+        let _ctx = &*ctx_clone;
+        match channel_clone.pins(&_ctx).await {
+            Ok(pins) => {
+                let old_pin = pins.iter().find(|m| {
+                    m.embeds
+                        .iter()
+                        .find(|e| {
+                            e.title
+                                .as_ref()
+                                .map_or(false, |t| t == "Your SurrealDB session")
+                        })
+                        .is_some()
+                });
+
+                match old_pin {
+                    Some(old_pin) => {
+                        old_pin.unpin(&_ctx).await.unwrap();
+                    }
+                    None => {}
+                }
+            }
+            Err(err) => error!(error = %err, "Failed to get pins"),
+        };
+        match msg_clone.pin(&_ctx).await {
+            Ok(_) => {}
+            Err(err) => error!(error = %err, "Failed to pin message"),
+        };
+    }.in_current_span());
 
     Ok(())
 }
@@ -346,7 +381,8 @@ pub async fn handle_modal(
                             &event.token,
                             "Big query processing...",
                             "Your query has been sent to the database and is processing now...",
-                        ).await?;
+                        )
+                        .await?;
                         conn.query(&ctx, channel, &event.user, query, vars).await?;
                     }
                     Err(err) => {
