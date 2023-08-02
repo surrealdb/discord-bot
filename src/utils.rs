@@ -1,6 +1,5 @@
 use std::{cmp::Ordering, env, path::Path};
 
-use cargo_lock::package::{GitReference, SourceKind};
 use once_cell::sync::Lazy;
 use serenity::{
     builder::CreateInteractionResponse,
@@ -295,7 +294,7 @@ pub async fn register_db(
                 sleep_until(last_time + ttl).await;
             }
         }
-        .instrument(tracing::Span::current()),
+        .in_current_span(),
     );
     Ok(())
 }
@@ -390,7 +389,7 @@ pub async fn load_attachment(
                     )
                     .await
                     .unwrap();
-                }.instrument(tracing::Span::current()));
+                }.in_current_span());
                 Ok(())
             }
             Err(why) => {

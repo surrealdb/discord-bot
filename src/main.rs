@@ -1,10 +1,10 @@
 use serenity::model::prelude::*;
-use serenity::prelude::*;
+use serenity::{prelude::*};
 
 use dotenv::dotenv;
 use std::env;
 use std::path::Path;
-use tracing::error;
+use tracing::{error, info};
 
 use surrealdb::engine::local::{Mem, RocksDb};
 
@@ -42,11 +42,18 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Error creating client");
 
     let shard_manager = client.shard_manager.clone();
+    let http = client.cache_and_http.http.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("Could not register ctrl+c handler");
-        // TODO: gracefully shutdown DBCONNS
+        
+        match surreal_bot::shutdown(&http).await {
+            Ok(_) => info!("Surreal Bot DBCONNS exported successfully"),
+            Err(e) => {
+                error!(error = %e, "An error occurred while shutting down");
+            }
+        }
         shard_manager.lock().await.shutdown_all().await;
     });
 

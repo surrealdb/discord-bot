@@ -191,7 +191,7 @@ async fn load_premade(
                         .unwrap();
                 }
             };
-        }.instrument(tracing::Span::current()));
+        }.in_current_span());
         Ok(())
     }
 }

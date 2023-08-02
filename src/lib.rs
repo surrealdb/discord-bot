@@ -14,7 +14,7 @@ use serenity::{
         prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
         user::User,
     },
-    prelude::Context,
+    prelude::Context, http::Http,
 };
 use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
 use tokio::sync::Mutex;
@@ -63,7 +63,7 @@ impl Conn {
                 PathBuf::from("tmp/")
             }
         };
-        let path = base_path.join(name).with_extension(".surql");
+        let path = base_path.join(name).with_extension("surql");
 
         match self.db.export(&path).await {
             Ok(()) => match tokio::fs::metadata(&path).await {
@@ -195,6 +195,32 @@ impl Conn {
         }
         Ok(())
     }
+}
+
+/// Exports all DBCONNS to their respective channels and returns.
+/// Used as part of graceful shutdown.
+pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
+    for (c, conn) in DBCONNS.lock().await.iter() {
+        let channel = ChannelId::from(*c);
+        match conn.export("shutdown_export").await {
+            Ok(Some(path)) => {
+                channel.send_message(&http, |m| {
+                    m.embed(|e| {
+                        e.title("Pre-shutdown DB Exported successfully").description("Find the exported .surql file below.\nYou can either use `/reconnect` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
+                    }).add_file(&path)
+                }).await?;
+                tokio::fs::remove_file(path).await?;
+            }
+            Ok(None) => {
+                warn!("Export was too big")
+            }
+            Err(err) => {
+                error!(error = %err, "Failed to export session");
+            }
+        }
+    }
+    DBCONNS.lock().await.clear();
+    Ok(())
 }
 
 pub fn process(

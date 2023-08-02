@@ -112,7 +112,7 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    }.instrument(tracing::Span::current()));
+                                    }.in_current_span());
                                 }
                                 "surreal_deal" => {
                                     interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal dataset.", channel.id.as_u64())).await?;
@@ -133,7 +133,7 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    }.instrument(tracing::Span::current()));
+                                    }.in_current_span());
                                 }
                                 dataset => {
                                     warn!(dataset, "Unknown dataset was requested");
@@ -184,7 +184,7 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                        }.instrument(tracing::Span::current()));
+                                        }.in_current_span());
                                     }
                                     Err(why) => {
                                         interaction_reply_edit(

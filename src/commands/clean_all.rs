@@ -31,7 +31,7 @@ pub async fn run(
         };
         let (channel, ctx) = (channel.clone(), ctx.clone());
         tokio::spawn(
-            async move { clean_channel(channel, &ctx).await }.instrument(tracing::Span::current()),
+            async move { clean_channel(channel, &ctx).await }.in_current_span(),
         );
     }
 
