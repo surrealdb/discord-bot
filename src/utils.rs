@@ -20,7 +20,7 @@ use serenity::{
 };
 use surrealdb::{
     engine::local::{Db, Mem},
-    Surreal,
+    Surreal, opt::auth::Root,
 };
 use tokio::{
     fs,
@@ -411,9 +411,11 @@ pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, a
     let db_config = surrealdb::opt::Config::new()
         .query_timeout(server_config.timeout)
         .transaction_timeout(server_config.timeout);
-    let db = Surreal::new::<Mem>(db_config).await?;
+    let db = Surreal::new::<Mem>((db_config, Root{username: "root", password: "root"})).await?;
 
     db.use_ns("test").use_db("test").await?;
+    
+    db.signin(Root{username: "root", password: "root"}).await?;
 
     Ok(db)
 }
