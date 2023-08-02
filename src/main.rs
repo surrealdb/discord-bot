@@ -1,5 +1,5 @@
 use serenity::model::prelude::*;
-use serenity::{prelude::*};
+use serenity::prelude::*;
 
 use dotenv::dotenv;
 use std::env;

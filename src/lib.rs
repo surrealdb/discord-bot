@@ -35,6 +35,9 @@ use surrealdb::Surreal;
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 pub static DB: Surreal<Db> = Surreal::init();
 
+pub const BIG_QUERY_SENT_KEY: &str = "Query sent";
+pub const BIG_QUERY_VARS_KEY: &str = "Variables sent";
+
 #[derive(Debug, Clone)]
 pub struct Conn {
     db: Surreal<Db>,
@@ -93,8 +96,7 @@ impl Conn {
             .send_message(&ctx, |mut m| {
                 m = m
                     .embed(|mut e| {
-                        // Update copy_big_query handler if this is changed.
-                        e = e.title("Query sent");
+                        e = e.title(BIG_QUERY_SENT_KEY);
                         e = e.description(format!("```sql\n{query:#}\n```"));
                         e.author(|a| {
                             a.name(&user.name)
@@ -118,8 +120,7 @@ impl Conn {
                     });
                 if let Some(vars) = &vars {
                     m.add_embed(|mut e| {
-                        // Update copy_big_query handler if this is changed.
-                        e = e.title("Variables sent");
+                        e = e.title(BIG_QUERY_VARS_KEY);
                         e = e.description(format!(
                             "```json\n{:#}\n```",
                             serde_json::to_string_pretty(&vars).unwrap_or_default()

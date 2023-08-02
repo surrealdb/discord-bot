@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    utils::{failure_ephemeral_interaction, success_ephemeral_interaction, SURREALDB_VERSION, BOT_VERSION}, DB,
+    utils::{failure_ephemeral_interaction, success_ephemeral_interaction, BOT_VERSION}, DB,
 };
 
 use anyhow::Result;

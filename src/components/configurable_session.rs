@@ -6,7 +6,7 @@ use crate::{
         clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
         success_user_interaction, BOT_VERSION, SURREALDB_VERSION,
     },
-    ConnType, DBCONNS,
+    ConnType, DBCONNS, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY,
 };
 
 use anyhow::Result;
@@ -224,7 +224,7 @@ pub async fn handle_component(
                 for embed in &event.message.embeds {
                     // TODO: maybe improve this "parsing" of query and vars
                     match embed.title {
-                        Some(ref title) if title == "Query sent" => {
+                        Some(ref title) if title == BIG_QUERY_SENT_KEY => {
                             query = embed
                                 .description
                                 .clone()
@@ -233,7 +233,7 @@ pub async fn handle_component(
                                 .replace("\n```", "")
                                 .to_string();
                         }
-                        Some(ref title) if title == "Variables sent" => {
+                        Some(ref title) if title == BIG_QUERY_VARS_KEY => {
                             vars = embed
                                 .description
                                 .clone()
