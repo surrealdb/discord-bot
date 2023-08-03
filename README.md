@@ -12,8 +12,8 @@ or use the docker container
 docker run -d -e "DISCORD_TOKEN=YOUR_TOKEN_HERE" -e "RUST_LOG=info,surreal_bot=debug" surrealdb/discord-bot
 ```
 
-Note `RUST_LOG` environment variable must be set to an appropiate tracing definition before any output is shown.
-Recommended default definition is `info,surreal_bot=debug`, where all dependencies use `info` and the bot itself is using `debug`.
+Note `RUST_LOG` environment variable must be set to an appropriate tracing definition before any output is shown.
+The recommended default definition is `info,surreal_bot=debug`, where all dependencies use `info` and the bot itself is using `debug`.
 There's also `trace` that can be used, for even more verbose output.
 
 # Discord commands
