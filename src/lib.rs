@@ -26,7 +26,6 @@ extern crate tracing;
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use surrealdb::engine::local::Db;
@@ -55,30 +54,24 @@ pub enum ConnType {
 
 impl Conn {
     #[must_use]
-    pub async fn export(&self, name: &str) -> Result<Option<PathBuf>, anyhow::Error> {
-        let base_path = match std::env::var("TEMP_DIR_PATH") {
-            Ok(p) => PathBuf::from(p),
-            Err(_) => {
-                tokio::fs::create_dir("tmp").await.ok();
-                PathBuf::from("tmp/")
-            }
-        };
-        let path = base_path.join(name).with_extension(".surql");
+    pub async fn export_to_attachment(&self) -> Result<Option<AttachmentType>, anyhow::Error> {
+        let mut acc = Vec::new();
+        let (s, r) = async_channel::unbounded();
+        self.db.export(s).await?;
 
-        match self.db.export(&path).await {
-            Ok(()) => match tokio::fs::metadata(&path).await {
-                Ok(metadata) => {
-                    if metadata.len() < utils::MAX_FILE_SIZE as u64 {
-                        Ok(Some(Path::new(&path).to_owned()))
-                    } else {
-                        tokio::fs::remove_file(path).await?;
-                        Ok(None)
-                    }
-                }
-                Err(err) => Err(err.into()),
-            },
-            Err(why) => Err(why.into()),
+        while let Ok(v) = r.recv().await {
+            acc.extend_from_slice(&v);
+
+            if acc.len() < utils::MAX_FILE_SIZE {
+                return Ok(None);
+            }
         }
+
+        let reply_attachment = AttachmentType::Bytes {
+            data: std::borrow::Cow::Owned(acc),
+            filename: format!("export.surql"),
+        };
+        Ok(Some(reply_attachment))
     }
 
     pub async fn query(
