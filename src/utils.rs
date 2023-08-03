@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, env, path::Path};
+use std::cmp::Ordering;
 
 use serenity::{
     builder::CreateInteractionResponse,
@@ -20,10 +20,7 @@ use surrealdb::{
     engine::local::{Db, Mem},
     Surreal,
 };
-use tokio::{
-    fs,
-    time::{sleep_until, Instant},
-};
+use tokio::time::{sleep_until, Instant};
 use tracing::Instrument;
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
@@ -185,31 +182,24 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             .await
             .ok();
 
-        let base_path = match env::var("TEMP_DIR_PATH") {
-            Ok(p) => p,
-            Err(_) => {
-                fs::create_dir("tmp").await.ok();
-                "tmp/".to_string()
+        match conn.export_to_attachment().await {
+            Ok(Some(attachment)) => {
+                channel
+                    .send_message(&ctx, |m| {
+                        m.content("Database exported:").add_file(attachment)
+                    })
+                    .await
+                    .ok();
             }
-        };
-        let path = format!("{base_path}{}.surql", channel.id.as_u64());
-
-        match conn.db.export(&path).await {
-            Ok(_) => {
-                if let Ok(metadata) = fs::metadata(&path).await {
-                    if metadata.len() < MAX_FILE_SIZE as u64 {
-                        channel
-                            .send_message(&ctx, |m| {
-                                m.content("Database exported:").add_file(Path::new(&path))
-                            })
-                            .await
-                            .ok();
-                    } else {
-                        channel.send_message(&ctx, |m| m.content(":x: Your database is too powerful, (the export is too large to send)")).await.ok();
-                    }
-                }
-
-                fs::remove_file(path).await.ok();
+            Ok(None) => {
+                channel
+                    .send_message(&ctx, |m| {
+                        m.content(
+                            ":x: Your database is too powerful, (the export is too large to send)",
+                        )
+                    })
+                    .await
+                    .ok();
             }
             Err(why) => {
                 channel
