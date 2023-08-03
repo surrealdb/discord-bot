@@ -43,6 +43,7 @@ pub enum CmdError {
     ExpectedNoSession,
     NoGuild,
     NoConfig,
+    ExpectedNoConfig,
     GetConfig(surrealdb::Error),
     UpdateConfig(surrealdb::Error),
     BuildConfig,
@@ -89,7 +90,7 @@ impl CmdError {
             ),
             CmdError::ExpectedNoSession => (
                 "Session already exists".into(),
-                "There is already a database instance associated with this channel!\nPlease use `Stop session` above to stop current SurrealDB instance or use `/config_update` to update current session configuration.".into()
+                "There is already a database instance associated with this channel!\nPlease use `Stop session` above to stop current SurrealDB instance or use `/configure_channel` to update current session configuration.".into()
             ),
             CmdError::NoGuild => (
                 "Not in a server".into(),
@@ -98,6 +99,10 @@ impl CmdError {
             CmdError::NoConfig => (
                 "Server config not found".into(),
                 "No config found for this server, please ask an administrator to configure the bot!".into(),
+            ),
+            CmdError::ExpectedNoConfig => (
+                "Server already configured".into(),
+                "Please use `/config_update` to update current server configuration.".into()
             ),
             CmdError::GetConfig(e) => (
                 "Error while querying for server config".into(),

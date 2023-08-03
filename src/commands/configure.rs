@@ -22,7 +22,7 @@ pub async fn run(
     match result {
         Ok(response) => {
             if response.is_some() {
-                return CmdError::ExpectedNoSession.reply(&ctx, command).await;
+                return CmdError::ExpectedNoConfig.reply(&ctx, command).await;
             }
         }
         Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
