@@ -415,3 +415,15 @@ pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, a
 
     Ok(db)
 }
+
+pub async fn export_to_vec(conn: &Conn) -> Result<Vec<u8>, anyhow::Error> {
+    let mut acc = Vec::new();
+    let (s, r) = async_channel::unbounded();
+    conn.db.export(s).await?;
+
+    while let Ok(v) = r.recv().await {
+        acc.extend_from_slice(&v);
+    }
+
+    Ok(acc)
+}

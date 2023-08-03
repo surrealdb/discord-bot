@@ -1,17 +1,16 @@
-use std::env;
-use std::path::Path;
-
 use serenity::model::prelude::application_command::ApplicationCommandInteraction;
+use serenity::model::prelude::AttachmentType;
 
 use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
-use tokio::fs;
 
 use crate::utils;
+use crate::utils::export_to_vec;
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_edit;
 use crate::utils::interaction_reply_ephemeral;
 use crate::DBCONNS;
+use async_channel;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
@@ -35,45 +34,29 @@ pub async fn run(
         ":information_source: Exporting database",
     )
     .await?;
+    match export_to_vec(&conn).await {
+        Ok(data) => {
+            if data.len() < utils::MAX_FILE_SIZE {
+                let reply_attachment = AttachmentType::Bytes {
+                    data: std::borrow::Cow::Borrowed(&data),
+                    filename: format!("export.surql"),
+                };
 
-    let base_path = match env::var("TEMP_DIR_PATH") {
-        Ok(p) => p,
-        Err(_) => {
-            fs::create_dir("tmp").await.ok();
-            "tmp/".to_string()
-        }
-    };
-    let path = format!("{base_path}{}.surql", command.id.as_u64());
-
-    match conn.db.export(&path).await {
-        Ok(_) => {
-            match fs::metadata(&path).await {
-                Ok(metadata) => {
-                    if metadata.len() < utils::MAX_FILE_SIZE as u64 {
-                        command
-                            .create_followup_message(ctx, |message| {
-                                message
-                                    .content(":white_check_mark: Database exported:")
-                                    .add_file(Path::new(&path))
-                            })
-                            .await?;
-                    } else {
-                        interaction_reply_edit(
-                            command,
-                            ctx,
-                            ":x: Your database is too powerful, (the export is too large to send)",
-                        )
-                        .await?;
-                    }
-                }
-                Err(_) => {
-                    command
-                        .create_followup_message(&ctx, |m| m.content(":x: Error in export process"))
-                        .await?;
-                }
+                command
+                    .create_followup_message(ctx, |message| {
+                        message
+                            .content(":white_check_mark: Database exported:")
+                            .add_file(reply_attachment)
+                    })
+                    .await?;
+            } else {
+                interaction_reply_edit(
+                    command,
+                    ctx,
+                    ":x: Your database is too powerful, (the export is too large to send)",
+                )
+                .await?;
             }
-
-            fs::remove_file(path).await?;
         }
         Err(why) => {
             interaction_reply_edit(command, ctx, format!(":x: Database export failed: {why}"))
