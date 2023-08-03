@@ -1,6 +1,6 @@
 [package]
 name = "surreal_bot"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 authors = [
     "Raphael Darley <raphael.darley@surrealdb.com>",
@@ -9,6 +9,7 @@ authors = [
 
 [dependencies]
 anyhow = "1.0.71"
+cargo-lock = "9.0.0"
 async-channel = "1.9.0"
 dotenv = "0.15.0"
 humantime = "2.1.0"

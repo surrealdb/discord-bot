@@ -5,9 +5,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::Context;
 use tokio::time::Instant;
 
-use crate::process;
-
-use crate::utils::{interaction_reply, interaction_reply_ephemeral, respond};
+use crate::utils::CmdError;
 use crate::DBCONNS;
 
 pub async fn run(
@@ -19,15 +17,7 @@ pub async fn run(
             c.last_used = Instant::now();
             c.clone()
         }
-        None => {
-            interaction_reply_ephemeral(
-                command,
-                ctx,
-                ":warning: No database instance found for this channel",
-            )
-            .await?;
-            return Ok(());
-        }
+        None => return CmdError::NoSession.reply(&ctx, command).await,
     };
 
     let query = command.data.options.clone()[0]
@@ -38,17 +28,13 @@ pub async fn run(
         .unwrap()
         .to_string();
 
-    interaction_reply(command, ctx.clone(), &query).await?;
-
-    let query_msg = command.get_interaction_response(&ctx).await?;
-
-    let result = conn.db.query(query).await;
-    let reply = match process(conn.pretty, conn.json, result) {
-        Ok(r) => r,
-        Err(e) => e.to_string(),
-    };
-
-    respond(reply, ctx, query_msg, &conn, command.channel_id).await
+    match surrealdb::sql::parse(&query) {
+        Ok(query) => {
+            conn.query(&ctx, &command.channel_id, &command.user, query, None)
+                .await
+        }
+        Err(e) => CmdError::BadQuery(e.into()).reply(&ctx, command).await,
+    }
 }
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {

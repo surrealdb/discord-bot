@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
-    utils::{failure_ephemeral_interaction, success_ephemeral_interaction}, DB,
+    utils::{ephemeral_interaction, CmdError, BOT_VERSION},
+    DB,
 };
 
 use anyhow::Result;
@@ -8,10 +9,7 @@ use humantime::format_duration;
 use serenity::{
     model::prelude::{
         component::{
-            ActionRow, ActionRowComponent,
-            ButtonStyle::Success,
-            InputText,
-            InputTextStyle::Short,
+            ActionRow, ActionRowComponent, ButtonStyle::Success, InputText, InputTextStyle::Short,
         },
         message_component::MessageComponentInteraction,
         modal::ModalSubmitInteraction,
@@ -22,8 +20,6 @@ use serenity::{
 };
 
 pub async fn show(ctx: &Context, channel: &ChannelId, config: &Config) -> Result<()> {
-    let version = DB.version().await?;
-
     channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
@@ -31,7 +27,7 @@ pub async fn show(ctx: &Context, channel: &ChannelId, config: &Config) -> Result
             .title("Your SurrealDB session")
             .description("This is your SurrealDB server configuration.\nYou can change it by clicking the options below.\n\nRight now active/archived channel groups can only be changed via `/config_update`.")
             .footer(|f| {
-                f.text(format!("SurrealDB Version: {}", version)).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                f.text(format!("Powered by Surreal Bot {}", BOT_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
             })
             .field("Active Channel group is", config.active_channel.mention(), true)
             .field("Archived Channel group is", config.archive_channel.mention(), true)
@@ -83,12 +79,12 @@ pub async fn handle_component(
         .manage_channels()
     {
         info!("User tried to change config, but has no permissions");
-        failure_ephemeral_interaction(
-            &ctx,
-            &event.id,
-            &event.token,
+        ephemeral_interaction(
+            ctx,
+            event,
             "No permissions!",
             "You need to have `Manage Channels` permission to change the server config!",
+            Some(false),
         )
         .await?;
         return Ok(());
@@ -102,27 +98,11 @@ pub async fn handle_component(
     match (id, result) {
         (_, Ok(None)) => {
             info!("Tried to change config, but there is no config for this server.");
-            failure_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
-                "No config!",
-                "There is no config for this server!\nPlease run `/configure` with initial settings!",
-            )
-            .await?;
-            return Ok(());
+            return CmdError::NoConfig.reply(ctx, event).await;
         }
         (_, Err(err)) => {
             error!("Error while getting config: {}", err);
-            failure_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
-                "Error!",
-                format!("Error while getting config:\n ```rust\n{err}\n```"),
-            )
-            .await?;
-            return Ok(());
+            return CmdError::GetConfig(err).reply(ctx, event).await;
         }
         ("ttl", Ok(Some(config))) | ("timeout", Ok(Some(config))) => {
             event
@@ -165,12 +145,12 @@ pub async fn handle_component(
             match updated {
                 Ok(Some(_)) => {
                     dirty = true;
-                    success_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
+                    ephemeral_interaction(
+                        ctx,
+                        event,
                         "Config updated!",
                         format!("{} is now set to {}", id, values[0]),
+                        Some(true),
                     )
                     .await?;
                 }
@@ -181,14 +161,7 @@ pub async fn handle_component(
                 }
                 Err(err) => {
                     error!("Error while updating config: {}", err);
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
-                        "Error!",
-                        format!("Error while updating config:\n ```rust\n{err}\n```"),
-                    )
-                    .await?;
+                    return CmdError::UpdateConfig(err).reply(ctx, event).await;
                 }
             }
         }
@@ -204,7 +177,7 @@ pub async fn handle_component(
         match result {
             Ok(Some(config)) => {
                 event.message.delete(&ctx).await?;
-                show(&ctx, &event.channel_id, &config).await?;
+                show(ctx, &event.channel_id, &config).await?;
             }
             _ => unreachable!("Should've returned long before..."),
         }
@@ -229,12 +202,12 @@ pub async fn handle_modal(
                     Ok(duration) => duration,
                     Err(err) => {
                         error!("Error while parsing duration: {}", err);
-                        failure_ephemeral_interaction(
-                            &ctx,
-                            &event.id,
-                            &event.token,
+                        ephemeral_interaction(
+                            ctx,
+                            event,
                             "Error while parsing duration",
                             format!("Error while parsing duration:\n ```rust\n{err}\n```"),
+                            Some(false),
                         )
                         .await?;
                         return Ok(());
@@ -255,16 +228,16 @@ pub async fn handle_modal(
                             .await;
                         match updated {
                             Ok(Some(_)) => {
-                                success_ephemeral_interaction(
-                                    &ctx,
-                                    &event.id,
-                                    &event.token,
+                                ephemeral_interaction(
+                                    ctx,
+                                    event,
                                     "Config updated",
                                     format!(
                                         "{} is now set to {}",
                                         id,
                                         humantime::format_duration(duration),
                                     ),
+                                    Some(true),
                                 )
                                 .await?;
                             }
@@ -275,14 +248,7 @@ pub async fn handle_modal(
                             }
                             Err(err) => {
                                 error!("Error while updating config: {}", err);
-                                failure_ephemeral_interaction(
-                                    &ctx,
-                                    &event.id,
-                                    &event.token,
-                                    "Error!",
-                                    format!("Error while updating config:\n ```rust\n{err}\n```"),
-                                )
-                                .await?;
+                                CmdError::UpdateConfig(err).reply(ctx, event).await?;
                             }
                         }
                     }

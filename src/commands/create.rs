@@ -16,7 +16,6 @@ use crate::components::configurable_session::show;
 use crate::{premade, utils::*};
 
 use crate::config::Config;
-use crate::utils::{interaction_reply, interaction_reply_edit, interaction_reply_ephemeral};
 use crate::DB;
 
 pub async fn run(
@@ -29,13 +28,11 @@ pub async fn run(
                 DB.select(("guild_config", id.to_string())).await;
 
             let config = match result {
-                Ok(response) => {
-                    match response {
-                        Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot".to_string()).await
-                    }
-                }
-                Err(e) => return interaction_reply_ephemeral(command, ctx, format!(":x: Database error: {}", e)).await,
+                Ok(response) => match response {
+                    Some(c) => c,
+                    None => return CmdError::NoConfig.reply(&ctx, command).await,
+                },
+                Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
             };
 
             let guild = Guild::get(&ctx, id).await.unwrap();
@@ -85,7 +82,9 @@ pub async fn run(
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one argument (you can use the up arrow to edit the previous command)").await?;
+                    CmdError::TooManyArguments(1, command.data.options.len())
+                        .reply(&ctx, command)
+                        .await?;
                     return Ok(());
                 }
                 Ordering::Equal => {
@@ -94,7 +93,11 @@ pub async fn run(
                         CommandOptionType::String => {
                             match op_option.value.unwrap().as_str().unwrap() {
                                 "surreal_deal_mini" => {
-                                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal (mini) dataset.", channel.id.as_u64())).await?;
+                                    ephemeral_interaction(&ctx, command,
+                                        "Database instance created, loading dataset...",
+                                        format!("You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded.\nOnce you receive a confirmation, you can start to query against the Surreal deal (mini) dataset.", channel.id.as_u64()),
+                                        None,
+                                    ).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
@@ -112,10 +115,14 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    }.instrument(tracing::Span::current()));
+                                    }.in_current_span());
                                 }
                                 "surreal_deal" => {
-                                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded. Once you receive a confirmation, you can start to query against the Surreal deal dataset.", channel.id.as_u64())).await?;
+                                    ephemeral_interaction(&ctx, command,
+                                        "Database instance created, loading dataset...",
+                                        format!("You now have your own database instance! Head over to <#{}> while the dataset is currently being loaded.\nOnce you receive a confirmation, you can start to query against the Surreal deal dataset.", channel.id.as_u64()),
+                                        None,
+                                    ).await?;
                                     let db = db.clone();
                                     let (channel, ctx, command) =
                                         (channel.clone(), ctx.clone(), command.clone());
@@ -133,16 +140,13 @@ pub async fn run(
                                             )
                                             .await
                                             .unwrap();
-                                    }.instrument(tracing::Span::current()));
+                                    }.in_current_span());
                                 }
                                 dataset => {
                                     warn!(dataset, "Unknown dataset was requested");
-                                    interaction_reply_ephemeral(
-                                        command,
-                                        ctx,
-                                        "Cannot find requested dataset",
-                                    )
-                                    .await?;
+                                    CmdError::UnknownDataset(dataset.to_string())
+                                        .reply(&ctx, command)
+                                        .await?;
                                     return Ok(());
                                 }
                             }
@@ -151,11 +155,14 @@ pub async fn run(
                             if let Some(CommandDataOptionValue::Attachment(attachment)) =
                                 op_option.resolved
                             {
-                                interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> while your file is now being uploaded. Once you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64())).await?;
+                                ephemeral_interaction(&ctx, command,
+                                    "Database instance created, loading dataset...",
+                                    format!("You now have your own database instance! Head over to <#{}> while your file is now being uploaded.\nOnce you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64()),
+                                    None,
+                                ).await?;
                                 match attachment.download().await {
                                     Ok(data) => {
-                                        interaction_reply_edit(command, ctx.clone(), format!(":information_source: You now have your own database instance! hHead over to <#{}> while your file is now being imported. Once you receive a confirmation, you can start querying against the imported dataset.", channel.id.as_u64())).await?;
-
+                                        ephemeral_interaction_edit(&ctx, command, "Attachment downloaded, importing...", "Your attachment has been downloaded and is being imported.", None).await?;
                                         let db = db.clone();
                                         let (channel, ctx, command) =
                                             (channel.clone(), ctx.clone(), command.clone());
@@ -165,50 +172,36 @@ pub async fn run(
                                                 .query(String::from_utf8_lossy(&data).into_owned())
                                                 .await
                                             {
-                                                interaction_reply_edit(
-                                                    &command,
-                                                    ctx.clone(),
-                                                    format!(":x: Error importing from file, please ensure that files are valid SurrealQL: {}", why),
-                                                )
-                                                .await
-                                                .ok();
+                                                ephemeral_interaction_edit(&ctx, &command, "Error importing from file", format!("Error importing from file, please ensure that files are valid SurrealQL:\n```rust\n{}\n```", why), Some(false)).await.unwrap();
                                                 channel.say(&ctx, format!(":x: Error loading data, channel will be deleted: {why}")).await.ok();
                                                 channel.delete(ctx).await.ok();
                                                 return;
                                             }
                                             channel.say(&ctx, format!("<@{}> Your instance now has your dataset, try writing some SurrealQL!", command.user.id.as_u64())).await.unwrap();
-                                            interaction_reply_edit(
-                                                &command,
-                                                ctx,
-                                                format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL to query your data!", channel.id.as_u64()),
-                                            )
-                                            .await
-                                            .unwrap();
-                                        }.instrument(tracing::Span::current()));
+                                            ephemeral_interaction_edit(&ctx, &command, "Import completed", format!("Your attachment has been imported, head over to <#{}> to start writing SurrealQL to query your data!.", channel.id.as_u64()), Some(true)).await.unwrap();
+                                        }.in_current_span());
                                     }
                                     Err(why) => {
-                                        interaction_reply_edit(
-                                            command,
-                                            ctx,
-                                            format!(":x: Error with attachment: {}", why),
-                                        )
-                                        .await?;
-                                        return Ok(());
+                                        return CmdError::AttachmentDownload(why.into())
+                                            .edit(&ctx, command)
+                                            .await
                                     }
                                 }
                             } else {
-                                interaction_reply_edit(command, ctx, ":x: Error with attachment")
-                                    .await?;
-                                return Ok(());
+                                return ephemeral_interaction_edit(
+                                    &ctx,
+                                    command,
+                                    "Error with attachment",
+                                    "Unknown error with attachment",
+                                    Some(false),
+                                )
+                                .await;
                             }
                         }
-                        _ => {
-                            interaction_reply_ephemeral(
-                                command,
-                                ctx,
-                                ":x: Unsupported option type",
-                            )
-                            .await?;
+                        opt => {
+                            CmdError::UnexpectedArgumentType(opt)
+                                .reply(&ctx, command)
+                                .await?;
                             return Ok(());
                         }
                     }
@@ -221,7 +214,16 @@ pub async fn run(
                         &config_clone,
                     )
                     .await?;
-                    interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance, head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
+                    ephemeral_interaction(
+                        &ctx,
+                        command,
+                        "Database instance created",
+                        format!(
+                            "You now have your own database instance! Head over to <#{}> to start writing SurrealQL!",
+                            channel.id.as_u64()
+                        ),
+                        None,
+                    ).await?;
                 }
             };
 
@@ -236,14 +238,7 @@ pub async fn run(
             .await?;
             Ok(())
         }
-        None => {
-            interaction_reply(
-                command,
-                ctx,
-                ":warning: Direct messages are not currently supported".to_string(),
-            )
-            .await
-        }
+        None => CmdError::NoGuild.reply(&ctx, command).await,
     }
 }
 

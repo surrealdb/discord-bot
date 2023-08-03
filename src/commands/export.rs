@@ -3,6 +3,7 @@ use serenity::model::prelude::application_command::ApplicationCommandInteraction
 use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
+use crate::utils::{ephemeral_interaction, CmdError};
 use crate::utils::interaction_reply;
 use crate::utils::interaction_reply_edit;
 use crate::utils::interaction_reply_ephemeral;
@@ -15,42 +16,35 @@ pub async fn run(
     let conn = match DBCONNS.lock().await.get(command.channel_id.as_u64()) {
         Some(c) => c.clone(),
         None => {
-            interaction_reply_ephemeral(
-                command,
-                ctx,
-                ":x: No database instance found for this channel",
-            )
-            .await?;
+            CmdError::NoSession.reply(&ctx, command).await?;
             return Ok(());
         }
     };
-    interaction_reply(
+
+    ephemeral_interaction(
+        &ctx,
         command,
-        ctx.clone(),
-        ":information_source: Exporting database",
+        "Exporting database",
+        "This may take a while",
+        None,
     )
     .await?;
+
     match conn.export_to_attachment().await {
-        Ok(Some(reply_attachment)) => {
-            command
-                .create_followup_message(ctx, |message| {
-                    message
-                        .content(":white_check_mark: Database exported:")
-                        .add_file(reply_attachment)
+        Ok(Some(attachment)) => {
+            command.create_interaction_response(&ctx, |r| {
+                r.interaction_response_data(|d| {
+                    d.embed(|e| {
+                        e.title("Exported successfully").description("Find the exported .surql file below.\nYou can either use `/load` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
+                    }).add_file(attachment)
                 })
-                .await?;
+            }).await?;
         }
         Ok(None) => {
-            interaction_reply_edit(
-                command,
-                ctx,
-                ":x: Your database is too powerful, (the export is too large to send)",
-            )
-            .await?;
+            CmdError::ExportTooLarge.reply(&ctx, command).await?;
         }
-        Err(why) => {
-            interaction_reply_edit(command, ctx, format!(":x: Database export failed: {why}"))
-                .await?
+        Err(err) => {
+            CmdError::ExportFailed(err).reply(&ctx, command).await?;
         }
     };
     Ok(())

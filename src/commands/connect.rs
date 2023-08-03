@@ -14,7 +14,6 @@ use crate::components::configurable_session::show;
 use crate::{premade, utils::*, DBCONNS};
 
 use crate::config::Config;
-use crate::utils::{interaction_reply, interaction_reply_edit, interaction_reply_ephemeral};
 use crate::DB;
 
 pub async fn run(
@@ -26,12 +25,7 @@ pub async fn run(
         .await
         .contains_key(command.channel_id.as_u64())
     {
-        interaction_reply_ephemeral(
-            command,
-            ctx,
-            ":information_source: This channel already has an associated database instance",
-        )
-        .await?;
+        CmdError::ExpectedNoSession.reply(&ctx, command).await?;
         return Ok(());
     }
     match command.guild_id {
@@ -40,13 +34,11 @@ pub async fn run(
                 DB.select(("guild_config", id.to_string())).await;
 
             let config = match result {
-                Ok(response) => {
-                    match response {
-                        Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot!".to_string()).await
-                    }
-                }
-                Err(e) => return interaction_reply_ephemeral(command, ctx, format!(":x: Database error: {}", e)).await,
+                Ok(response) => match response {
+                    Some(c) => c,
+                    None => return CmdError::NoConfig.reply(&ctx, command).await,
+                },
+                Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
             };
 
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
@@ -65,7 +57,9 @@ pub async fn run(
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one arguement (you can use the up arrow to edit the previous command)").await?;
+                    CmdError::TooManyArguments(1, command.data.options.len())
+                        .reply(&ctx, command)
+                        .await?;
                     return Ok(());
                 }
                 Ordering::Equal => {
@@ -99,13 +93,10 @@ pub async fn run(
                                     )
                                     .await?;
                                 }
-                                _ => {
-                                    interaction_reply_ephemeral(
-                                        command,
-                                        ctx,
-                                        "Cannot find requested dataset",
-                                    )
-                                    .await?;
+                                dataset => {
+                                    CmdError::UnknownDataset(dataset.to_string())
+                                        .reply(&ctx, command)
+                                        .await?;
                                     return Ok(());
                                 }
                             }
@@ -115,37 +106,29 @@ pub async fn run(
                                 .await?;
                             load_attachment(op_option, command, ctx, db, channel).await?
                         }
-                        _ => {
-                            interaction_reply_ephemeral(
-                                command,
-                                ctx,
-                                ":x: Unsupported option type",
-                            )
-                            .await?;
+                        opt => {
+                            CmdError::UnexpectedArgumentType(opt)
+                                .reply(&ctx, command)
+                                .await?;
                             return Ok(());
                         }
                     }
                 }
                 Ordering::Less => {
                     show(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
-                    interaction_reply_ephemeral(
+                    ephemeral_interaction(
+                        &ctx,
                         command,
-                        ctx,
-                        ":information_source: Your session is now available!",
+                        "Session created",
+                        "Your session is now available!",
+                        Some(true),
                     )
-                    .await?
+                    .await?;
                 }
             };
             Ok(())
         }
-        None => {
-            interaction_reply(
-                command,
-                ctx,
-                ":warning: Direct messages are not currently supported".to_string(),
-            )
-            .await
-        }
+        None => CmdError::NoGuild.reply(&ctx, command).await,
     }
 }
 
@@ -174,31 +157,19 @@ async fn load_premade(
     config: &Config,
 ) -> Result<(), anyhow::Error> {
     {
-        show(&ctx, &channel, crate::ConnType::ConnectedChannel, &config).await?;
-        interaction_reply(
-            command,
-            ctx.clone(),
-            format!(
-                ":information_source: The dataset is currently being loaded, soon you'll be able to query the {} dataset! \n_Please wait for a confirmation that the dataset is loaded!_",
-                name
-            ),
-        )
-        .await?;
+        show(&ctx, &channel, crate::ConnType::ConnectedChannel, config).await?;
+        ephemeral_interaction(&ctx, command,
+            "Premade dataset loading...",
+            format!("The dataset is currently being loaded, soon you'll be able to query the {} dataset! \n_Please wait for a confirmation that the dataset is loaded!_", name), None).await?;
+
         let db = db.clone();
         let (channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
         tokio::spawn(async move {
             match db.import(format!("premade/{}", file_name)).await {
                 Ok(_) => {
-                    interaction_reply_edit(
-                        &command,
-                        ctx.clone(),
-                        format!(
-                            ":white_check_mark: The dataset is now loaded and you can query the {} dataset with the `/query` command!",
-                            name
-                        ),
-                    )
-                    .await
-                    .unwrap();
+                    ephemeral_interaction_edit(&ctx, &command,
+                        "Premade dataset loaded!",
+                        format!("The dataset is now loaded and you can query the {} dataset with the `/query` command!", name), Some(true)).await.unwrap();
                     if let Some(scheme_file_name) = schema_name {
                         channel
                             .send_files(
@@ -214,12 +185,10 @@ async fn load_premade(
                     }
                 }
                 Err(why) => {
-                    interaction_reply_edit(&command, ctx, format!(":x: Error loading data: {}", why))
-                        .await
-                        .unwrap();
+                    ephemeral_interaction_edit(&ctx, &command, "Dataset loading failed!" , format!("Error loading data:\n```rust\n{}\n```", why), Some(false)).await.unwrap();
                 }
             };
-        }.instrument(tracing::Span::current()));
+        }.in_current_span());
         Ok(())
     }
 }

@@ -8,7 +8,8 @@ use serenity::prelude::*;
 use tracing::Instrument;
 
 use crate::utils::clean_channel;
-use crate::utils::interaction_reply_ephemeral;
+use crate::utils::ephemeral_interaction;
+use crate::utils::CmdError;
 use crate::DBCONNS;
 
 pub async fn run(
@@ -20,25 +21,20 @@ pub async fn run(
         let channel = match ChannelId(*id).to_channel(&ctx).await.unwrap() {
             Channel::Guild(c) => c,
             _ => {
-                interaction_reply_ephemeral(
-                    command,
-                    ctx,
-                    ":warning: This command only works in guild channels",
-                )
-                .await?;
+                CmdError::NoGuild.reply(&ctx, command).await?;
                 return Ok(());
             }
         };
         let (channel, ctx) = (channel.clone(), ctx.clone());
-        tokio::spawn(
-            async move { clean_channel(channel, &ctx).await }.instrument(tracing::Span::current()),
-        );
+        tokio::spawn(async move { clean_channel(channel, &ctx).await }.in_current_span());
     }
 
-    interaction_reply_ephemeral(
+    ephemeral_interaction(
+        &ctx,
         command,
-        ctx,
-        ":white_check_mark: All channels should now be cleaned",
+        "Cleaned all channels",
+        "All channels should now be cleaned",
+        Some(true),
     )
     .await
 }

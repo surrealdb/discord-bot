@@ -1,6 +1,12 @@
+use std::{borrow::Cow, sync::Arc};
+
 use crate::{
     config::Config,
     utils::{
+        clean_channel, ephemeral_interaction, user_interaction, CmdError, BOT_VERSION,
+        SURREALDB_VERSION,
+    },
+    ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DBCONNS,
         clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
         success_user_interaction,
     },
@@ -25,27 +31,28 @@ use serenity::{
     },
     prelude::Context,
 };
+use tracing::Instrument;
 
 /// Send a message to the server with prebuilt components for DB channel configuration management
+#[instrument(skip(ctx, channel, conn, config))]
 pub async fn show(
     ctx: &Context,
     channel: &GuildChannel,
     conn: ConnType,
     config: &Config,
 ) -> Result<()> {
-    let version = DB.version().await?;
-    channel.send_message(&ctx, |message| {
+    let msg = channel.send_message(&ctx, |message| {
         message
         .embed(|embed| {
             embed
             .title("Your SurrealDB session")
-            .description(format!("{} \n* You can use `/load` to load a premade dataset or your own SurrealQL from a file.", match conn {
+            .description(format!("{} \n* You can use `/load` to load a premade dataset or your own SurrealQL from a file.\n* You are using SurrealDB {}.", match conn {
                 ConnType::ConnectedChannel => "This channel is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
                 ConnType::EphemeralChannel => "This brand new channel is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n\n* You can use `/share` to add friends to this channel.",
                 ConnType::Thread => "This public thread is now connected to a SurrealDB instance. \nTry writing some SurrealQL! \n",
-            }))
+            }, SURREALDB_VERSION.as_str()))
             .footer(|f| {
-                f.text(format!("SurrealDB Version: {}", version)).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                f.text(format!("Powered by Surreal Bot {}", BOT_VERSION.as_str())).icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
             })
             .field("Session lifetime after last query is ", format_duration(config.ttl), true)
             .field("Query timeout is set to ", format_duration(config.timeout), true)
@@ -83,6 +90,36 @@ pub async fn show(
         })
     }).await?;
 
+    let ctx_clone = Arc::new(ctx.clone());
+    let channel_clone = Arc::new(channel.clone());
+    let msg_clone = Arc::new(msg);
+    tokio::spawn(
+        async move {
+            let _ctx = &*ctx_clone;
+            match channel_clone.pins(&_ctx).await {
+                Ok(pins) => {
+                    let old_pin = pins.iter().find(|m| {
+                        m.embeds.iter().any(|e| {
+                            e.title
+                                .as_ref()
+                                .map_or(false, |t| t == "Your SurrealDB session")
+                        })
+                    });
+
+                    if let Some(old_pin) = old_pin {
+                        old_pin.unpin(&_ctx).await.unwrap();
+                    }
+                }
+                Err(err) => error!(error = %err, "Failed to get pins"),
+            };
+            match msg_clone.pin(&_ctx).await {
+                Ok(_) => {}
+                Err(err) => error!(error = %err, "Failed to pin message"),
+            };
+        }
+        .in_current_span(),
+    );
+
     Ok(())
 }
 
@@ -112,12 +149,12 @@ pub async fn handle_component(
                 _ => unreachable!(),
             }
             DBCONNS.lock().await.insert(channel.0, db);
-            success_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
+            ephemeral_interaction(
+                ctx,
+                event,
                 "Config updated",
                 format!("{} is now set to {}", id, values[0]),
+                Some(true),
             )
             .await?;
         }
@@ -140,24 +177,10 @@ pub async fn handle_component(
                     }).await?;
                 }
                 Ok(None) => {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
-                        "Failed to export",
-                        "Export was too big...",
-                    )
-                    .await?;
+                    CmdError::ExportTooLarge.reply(ctx, event).await?;
                 }
                 Err(err) => {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
-                        "Failed to export",
-                        format!("{err:#?}"),
-                    )
-                    .await?;
+                    CmdError::ExportFailed(err).reply(ctx, event).await?;
                 }
             }
         }
@@ -169,13 +192,42 @@ pub async fn handle_component(
                     .await?
                     .guild()
                     .expect("our components are only available in guilds"),
-                &ctx,
+                ctx,
             )
             .await;
         }
-        ("big_query", true) => {
-            // TODO: We could keep a hashmap of user's queries and variables when they submit them,
-            // and set the valuess to the last submitted value, so that they don't have to retype it
+        ("big_query", true) | ("copy_big_query", true) => {
+            let (query, vars) = if id == "big_query" {
+                (Cow::Borrowed(""), Cow::Borrowed(""))
+            } else {
+                let (mut query, mut vars) = (String::new(), String::new());
+                for embed in &event.message.embeds {
+                    // TODO: maybe improve this "parsing" of query and vars
+                    match embed.title {
+                        Some(ref title) if title == BIG_QUERY_SENT_KEY => {
+                            query = embed
+                                .description
+                                .clone()
+                                .unwrap_or_default()
+                                .replace("```sql\n", "")
+                                .replace("\n```", "")
+                                .to_string();
+                        }
+                        Some(ref title) if title == BIG_QUERY_VARS_KEY => {
+                            vars = embed
+                                .description
+                                .clone()
+                                .unwrap_or_default()
+                                .replace("```json\n", "")
+                                .replace("\n```", "")
+                                .to_string();
+                        }
+                        _ => {}
+                    }
+                }
+                (Cow::Owned(query), Cow::Owned(vars))
+            };
+
             event
                 .create_interaction_response(&ctx, |a| {
                     a.kind(Modal).interaction_response_data(|d| {
@@ -183,23 +235,26 @@ pub async fn handle_component(
                             c.create_action_row(|r| {
                                 r.create_input_text(|i| {
                                     i.custom_id("configurable_session:big_query")
-                                        .label("Big query (ignore errors from submit)")
+                                        .label("Big query")
                                         .style(Paragraph)
                                         .placeholder("Your Surreal query")
                                         .required(true)
+                                        .value(query)
                                 })
                             })
                             .create_action_row(|r| {
                                 r.create_input_text(|i| {
                                     i.custom_id("configurable_session:big_query_variables")
-                                        .label("Variables")
+                                        .label("Variables (as JSON)")
                                         .style(Paragraph)
                                         .placeholder("Your Surreal variables (as JSON)")
+                                        .required(false)
+                                        .value(vars)
                                 })
                             })
                         })
                         .custom_id("configurable_session:big_query")
-                        .title("Big query editor")
+                        .title("Big Query editor")
                     })
                 })
                 .await?;
@@ -239,14 +294,7 @@ pub async fn handle_component(
         }
         (_, false) => {
             info!("No connection found for channel");
-            failure_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
-                "Session expired or terminated",
-                "There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.",
-            )
-            .await?;
+            CmdError::NoSession.reply(ctx, event).await?;
         }
         _ => {
             warn!(sub_id = id, "Unknown configurable_session component");
@@ -268,7 +316,7 @@ pub async fn handle_modal(
             if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
             {
                 trace!(raw_query = value, "Received big query");
-                match surrealdb::sql::parse(&value) {
+                match surrealdb::sql::parse(value) {
                     Ok(query) => {
                         debug!(query = ?query, "Parsed big query successfully");
                         let conn = DBCONNS
@@ -278,17 +326,19 @@ pub async fn handle_modal(
                             .expect("DB disappeared between now and modal opening")
                             .clone();
                         let vars = match &values[1].components[0] {
-                            ActionRowComponent::InputText(InputText { value, .. }) => {
+                            ActionRowComponent::InputText(InputText { value, .. })
+                                if !value.is_empty() =>
+                            {
                                 match serde_json::from_str(value) {
                                     Ok(vars) => Some(vars),
                                     Err(err) => {
                                         debug!(err = ?err, "Failed to parse variables");
-                                        failure_ephemeral_interaction(
-                                            &ctx,
-                                            &event.id,
-                                            &event.token,
+                                        ephemeral_interaction(
+                                            ctx,
+                                            event,
                                             "Failed to parse big query variables!",
                                             format!("```rust\n{err:#}```"),
+                                            Some(false),
                                         )
                                         .await?;
                                         return Ok(());
@@ -297,19 +347,20 @@ pub async fn handle_modal(
                             }
                             _ => None,
                         };
-                        conn.query(&ctx, channel, &event.user, query, vars).await?;
+                        // Gotta send a response interaction to let modal know we're processing the query
+                        ephemeral_interaction(
+                            ctx,
+                            event,
+                            "Big query processing...",
+                            "Your query has been sent to the database and is processing now...",
+                            Some(true),
+                        )
+                        .await?;
+                        conn.query(ctx, channel, &event.user, query, vars).await?;
                     }
                     Err(err) => {
                         debug!(err = ?err, "Failed to parse big query");
-                        failure_ephemeral_interaction(
-                            &ctx,
-                            &event.id,
-                            &event.token,
-                            "Failed to parse big query!",
-                            format!("```sql\n{err:#}```"),
-                        )
-                        .await?;
-                        return Ok(());
+                        return CmdError::BadQuery(err.into()).reply(ctx, event).await;
                     }
                 }
             }
@@ -324,25 +375,25 @@ pub async fn handle_modal(
                     .expect("our components are only available in guilds")
                     .name;
                 if value == &channel_name {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
+                    ephemeral_interaction(
+                        ctx,
+                        event,
                         "Failed to rename thread!",
                         "The new name is the same as the old name.",
+                        Some(false),
                     )
                     .await?;
                     return Ok(());
                 }
                 info!(old_name = %channel_name, new_name = %value, "Renaming thread");
                 channel.edit(&ctx, |c| c.name(value)).await?;
-                success_user_interaction(
-                    &ctx,
-                    &event.id,
-                    &event.token,
+                user_interaction(
+                    ctx,
+                    event,
                     &event.user,
                     "Thread renamed",
                     format!("The thread has been renamed to `{value}`"),
+                    Some(true),
                 )
                 .await?;
             }

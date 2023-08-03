@@ -4,7 +4,7 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
-use crate::utils::{interaction_reply, interaction_reply_ephemeral};
+use crate::utils::{ephemeral_interaction, CmdError};
 use crate::DBCONNS;
 
 pub async fn run(
@@ -24,22 +24,17 @@ pub async fn run(
                 _ => {}
             }
         }
-        interaction_reply(
+
+        ephemeral_interaction(
+            &ctx,
             command,
-            ctx,
-            format!(
-                ":information_source: **This channel's configuration was updated** \nPretty printing: `{}` \nJSON: `{}` \nRequire query: `{}`",
-                conn.pretty, conn.json, conn.require_query
-            ),
+            "Config updated",
+            "This channel's configuration has been updated.",
+            Some(true),
         )
         .await?;
     } else {
-        interaction_reply_ephemeral(
-            command,
-            ctx,
-            ":warning: There is no database instance currently associated with this channel",
-        )
-        .await?;
+        CmdError::NoSession.reply(&ctx, command).await?;
     }
 
     Ok(())

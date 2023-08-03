@@ -10,6 +10,7 @@ pub mod utils;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serenity::{
+    http::Http,
     model::{
         prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
         user::User,
@@ -33,6 +34,9 @@ use surrealdb::Surreal;
 
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 pub static DB: Surreal<Db> = Surreal::init();
+
+pub const BIG_QUERY_SENT_KEY: &str = "Query sent";
+pub const BIG_QUERY_VARS_KEY: &str = "Variables sent";
 
 #[derive(Debug, Clone)]
 pub struct Conn {
@@ -86,7 +90,7 @@ impl Conn {
             .send_message(&ctx, |mut m| {
                 m = m
                     .embed(|mut e| {
-                        e = e.title("Query sent");
+                        e = e.title(BIG_QUERY_SENT_KEY);
                         e = e.description(format!("```sql\n{query:#}\n```"));
                         e.author(|a| {
                             a.name(&user.name)
@@ -97,15 +101,21 @@ impl Conn {
                         c.create_action_row(|r| {
                             r.create_button(|b| {
                                 b.custom_id("configurable_session:big_query")
-                                    .label("Another Big Query please")
+                                    .label("New Big Query please")
                                     .style(Primary)
                                     .emoji('📝')
+                            })
+                            .create_button(|b| {
+                                b.custom_id("configurable_session:copy_big_query")
+                                    .label("Copy this Big Query")
+                                    .style(Primary)
+                                    .emoji('🔁')
                             })
                         })
                     });
                 if let Some(vars) = &vars {
                     m.add_embed(|mut e| {
-                        e = e.title("Query variables");
+                        e = e.title(BIG_QUERY_VARS_KEY);
                         e = e.description(format!(
                             "```json\n{:#}\n```",
                             serde_json::to_string_pretty(&vars).unwrap_or_default()
@@ -181,6 +191,32 @@ impl Conn {
         }
         Ok(())
     }
+}
+
+/// Exports all DBCONNS to their respective channels and returns.
+/// Used as part of graceful shutdown.
+pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
+    for (c, conn) in DBCONNS.lock().await.iter() {
+        let channel = ChannelId::from(*c);
+        match conn.export("shutdown_export").await {
+            Ok(Some(path)) => {
+                channel.send_message(&http, |m| {
+                    m.embed(|e| {
+                        e.title("Pre-shutdown DB Exported successfully").description("Sorry! The bot had to go offline for maintenance, your session has been exported. You can find the .surql file attached.\nYou can either use `/reconnect` and load a new session with it when the bot is back online, or use it locally with `surreal import` CLI.").color(0x00ff00)
+                    }).add_file(&path)
+                }).await?;
+                tokio::fs::remove_file(path).await?;
+            }
+            Ok(None) => {
+                warn!("Export was too big")
+            }
+            Err(err) => {
+                error!(error = %err, "Failed to export session");
+            }
+        }
+    }
+    DBCONNS.lock().await.clear();
+    Ok(())
 }
 
 pub fn process(

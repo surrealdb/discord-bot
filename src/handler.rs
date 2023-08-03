@@ -10,8 +10,7 @@ use tracing::Level;
 
 use crate::commands;
 use crate::process;
-use crate::utils::interaction_reply;
-use crate::utils::interaction_reply_ephemeral;
+use crate::utils::ephemeral_interaction;
 use crate::utils::respond;
 use crate::DBCONNS;
 
@@ -89,6 +88,7 @@ impl EventHandler for Handler {
                 async {
                     trace!(command = ?command, "received command interaction");
                     let res = match command.data.name.as_str() {
+                        "auth" => commands::auth::run(&command, ctx.clone()).await,
                         "create" => commands::create::run(&command, ctx.clone()).await,
                         "configure" => commands::configure::run(&command, ctx.clone()).await,
                         "share" => commands::share::run(&command, ctx.clone()).await,
@@ -106,12 +106,7 @@ impl EventHandler for Handler {
                         "export" => commands::export::run(&command, ctx.clone()).await,
                         _ => {
                             warn!(command_name = %command.data.name, command_options = ?command.data.options, "unknown command received");
-                            interaction_reply(
-                                &command,
-                                ctx.clone(),
-                                ":warning: Command is currently not implemented".to_string(),
-                            )
-                            .await
+                            ephemeral_interaction(&ctx, &command, "Unknown command", "Command is currently not implemented", Some(false)).await
                         }
                     };
 
@@ -121,9 +116,7 @@ impl EventHandler for Handler {
                             .await
                             .ok();
                         warn!(error = %why, "Cannot respond to slash command");
-                        interaction_reply_ephemeral(&command, ctx, ":x: Error processing command".to_string())
-                            .await
-                            .unwrap();
+                        ephemeral_interaction(&ctx, &command, "Error processing command", format!("There was an error processing this command:\n```rust\n{why}\n```"), Some(false)).await.unwrap()
                     }
                 }.instrument(span).await;
             }
@@ -145,7 +138,7 @@ impl EventHandler for Handler {
                                 &ctx,
                                 &event,
                                 &event.channel_id,
-                                &id,
+                                id,
                                 &event.data.values,
                             )
                             .await
@@ -155,7 +148,7 @@ impl EventHandler for Handler {
                                 &ctx,
                                 &event,
                                 &event.guild_id.unwrap_or_default(),
-                                &id,
+                                id,
                                 &event.data.values,
                             )
                             .await
@@ -189,7 +182,7 @@ impl EventHandler for Handler {
                                 &ctx,
                                 &modal,
                                 &modal.channel_id,
-                                &id,
+                                id,
                                 &modal.data.components,
                             )
                             .await
@@ -199,7 +192,7 @@ impl EventHandler for Handler {
                                 &ctx,
                                 &modal,
                                 &modal.guild_id.unwrap_or_default(),
-                                &id,
+                                id,
                                 &modal.data.components,
                             )
                             .await
