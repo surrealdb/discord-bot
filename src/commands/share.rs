@@ -54,14 +54,7 @@ pub async fn run(
         )
         .await?;
     } else {
-        ephemeral_interaction(
-            &ctx,
-            command,
-            "Already public",
-            "Could not add user to channel as it's already a public thread.",
-            Some(false),
-        )
-        .await?;
+        return CmdError::NoGuild.reply(&ctx, command).await;
     }
 
     command
