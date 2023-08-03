@@ -1,4 +1,5 @@
 use std::{borrow::Cow, cmp::Ordering, path::Path};
+use std::cmp::Ordering;
 
 use once_cell::sync::Lazy;
 use serenity::{
@@ -345,8 +346,8 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             Err(e) => error!("Failed to send system message: {}", e),
         };
 
-        match conn.export("expired_session").await {
-            Ok(Some(path)) => {
+        match conn.export_to_attachment().await {
+            Ok(Some(attachment)) => {
                 match system_message(
                     ctx,
                     &channel.id,
@@ -354,16 +355,12 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
                     "You can find your exported DB attached.",
                     Some(true),
                     None,
-                    Some(&path),
+                    Some(attachment),
                 )
                 .await
                 {
                     Ok(_) => {}
                     Err(e) => error!("Failed to send system message: {}", e),
-                }
-                match tokio::fs::remove_file(path).await {
-                    Ok(_) => {}
-                    Err(e) => error!("Failed to remove file: {}", e),
                 }
             }
             Ok(None) => {

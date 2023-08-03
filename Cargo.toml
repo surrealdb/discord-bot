@@ -2,11 +2,15 @@
 name = "surreal_bot"
 version = "0.3.1"
 edition = "2021"
-authors = ["Raphael Darley <raphael.darley@surrealdb.com>", "alyti <alticodes@gmail.com>"]
+authors = [
+    "Raphael Darley <raphael.darley@surrealdb.com>",
+    "alyti <alticodes@gmail.com>",
+]
 
 [dependencies]
 anyhow = "1.0.71"
 cargo-lock = "9.0.0"
+async-channel = "1.9.0"
 dotenv = "0.15.0"
 humantime = "2.1.0"
 memorable-wordlist = "0.1.7"
@@ -19,11 +23,15 @@ serenity = { default-features = false, features = [
     "model",
     "rustls_backend",
 ], version = "0.11.6" }
-surrealdb = { git = "https://github.com/surrealdb/surrealdb.git", features = [
+surrealdb = { git = "https://github.com/raphaeldarley/surrealdb.git", branch = "allow-export-to-buffer", features = [
     "kv-mem",
     "kv-rocksdb",
 ] }
-tokio = { version = "1.29.1", features = ["macros", "signal", "rt-multi-thread"] }
+tokio = { version = "1.29.1", features = [
+    "macros",
+    "signal",
+    "rt-multi-thread",
+] }
 tracing = "0.1"
 tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -4,6 +4,9 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
 use crate::utils::{ephemeral_interaction, CmdError};
+use crate::utils::interaction_reply;
+use crate::utils::interaction_reply_edit;
+use crate::utils::interaction_reply_ephemeral;
 use crate::DBCONNS;
 
 pub async fn run(
@@ -27,16 +30,15 @@ pub async fn run(
     )
     .await?;
 
-    match conn.export(&command.channel_id.0.to_string()).await {
-        Ok(Some(path)) => {
+    match conn.export_to_attachment().await {
+        Ok(Some(attachment)) => {
             command.create_interaction_response(&ctx, |r| {
                 r.interaction_response_data(|d| {
                     d.embed(|e| {
                         e.title("Exported successfully").description("Find the exported .surql file below.\nYou can either use `/load` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
-                    }).add_file(&path)
+                    }).add_file(attachment)
                 })
             }).await?;
-            tokio::fs::remove_file(path).await?;
         }
         Ok(None) => {
             CmdError::ExportTooLarge.reply(&ctx, command).await?;

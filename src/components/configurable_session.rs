@@ -7,6 +7,10 @@ use crate::{
         SURREALDB_VERSION,
     },
     ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DBCONNS,
+        clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
+        success_user_interaction,
+    },
+    ConnType, DB, DBCONNS,
 };
 
 use anyhow::Result;
@@ -156,28 +160,21 @@ pub async fn handle_component(
         }
         ("export", true) => {
             debug!("Exporting database");
-            let channel_name = channel
-                .to_channel(&ctx)
-                .await?
-                .guild()
-                .expect("our components are only available in guilds")
-                .name;
             let conn = DBCONNS
                 .lock()
                 .await
                 .get_mut(&channel.0)
                 .expect("DB disappeared between now above check")
                 .clone();
-            match conn.export(&channel_name).await {
-                Ok(Some(path)) => {
+            match conn.export_to_attachment().await {
+                Ok(Some(attachment)) => {
                     event.create_interaction_response(&ctx, |r| {
                         r.interaction_response_data(|d| {
                             d.embed(|e| {
                                 e.title("Exported successfully").description("Find the exported .surql file below.\nYou can either use `/load` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
-                            }).add_file(&path)
+                            }).add_file(attachment)
                         })
                     }).await?;
-                    tokio::fs::remove_file(path).await?;
                 }
                 Ok(None) => {
                     CmdError::ExportTooLarge.reply(ctx, event).await?;
