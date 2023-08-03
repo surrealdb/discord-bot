@@ -6,7 +6,7 @@ You can can run the bot with this command:
 ```
 docker run -d -e "DISCORD_TOKEN=YOUR_TOKEN_HERE" surrealdb/discord-bot
 ```
-you can also optionally include CONFIG_DB_PATH, or TEMP_DIR_PATH in the environment
+you can also optionally include CONFIG_DB_PATH in the environment
 
 # Discord commands
 

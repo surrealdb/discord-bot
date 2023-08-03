@@ -29,12 +29,10 @@ pub async fn run(
 
     match conn.export_to_attachment().await {
         Ok(Some(attachment)) => {
-            command.create_interaction_response(&ctx, |r| {
-                r.interaction_response_data(|d| {
+            command.create_followup_message(&ctx, |d| {
                     d.embed(|e| {
                         e.title("Exported successfully").description("Find the exported .surql file below.\nYou can either use `/load` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
                     }).add_file(attachment)
-                })
             }).await?;
         }
         Ok(None) => {

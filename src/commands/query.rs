@@ -30,8 +30,15 @@ pub async fn run(
 
     match surrealdb::sql::parse(&query) {
         Ok(query) => {
-            conn.query(&ctx, &command.channel_id, &command.user, query, None)
-                .await
+            conn.query(
+                &ctx,
+                &command.channel_id,
+                Some(&command),
+                &command.user,
+                query,
+                None,
+            )
+            .await
         }
         Err(e) => CmdError::BadQuery(e.into()).reply(&ctx, command).await,
     }

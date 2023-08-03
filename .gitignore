@@ -4,3 +4,4 @@ config.toml
 database.db
 .env
 config.db
+.DS_Store

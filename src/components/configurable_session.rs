@@ -86,36 +86,37 @@ pub async fn show(
         })
     }).await?;
 
-    let ctx_clone = Arc::new(ctx.clone());
-    let channel_clone = Arc::new(channel.clone());
-    let msg_clone = Arc::new(msg);
-    tokio::spawn(
-        async move {
-            let _ctx = &*ctx_clone;
-            match channel_clone.pins(&_ctx).await {
-                Ok(pins) => {
-                    let old_pin = pins.iter().find(|m| {
-                        m.embeds.iter().any(|e| {
-                            e.title
-                                .as_ref()
-                                .map_or(false, |t| t == "Your SurrealDB session")
-                        })
-                    });
+    if conn != ConnType::ConnectedChannel {
+        let ctx_clone = Arc::new(ctx.clone());
+        let channel_clone = Arc::new(channel.clone());
+        let msg_clone = Arc::new(msg);
+        tokio::spawn(
+            async move {
+                let _ctx = &*ctx_clone;
+                match channel_clone.pins(&_ctx).await {
+                    Ok(pins) => {
+                        let old_pin = pins.iter().find(|m| {
+                            m.embeds.iter().any(|e| {
+                                e.title
+                                    .as_ref()
+                                    .map_or(false, |t| t == "Your SurrealDB session")
+                            })
+                        });
 
-                    if let Some(old_pin) = old_pin {
-                        old_pin.unpin(&_ctx).await.unwrap();
+                        if let Some(old_pin) = old_pin {
+                            old_pin.unpin(&_ctx).await.unwrap();
+                        }
                     }
-                }
-                Err(err) => error!(error = %err, "Failed to get pins"),
-            };
-            match msg_clone.pin(&_ctx).await {
-                Ok(_) => {}
-                Err(err) => error!(error = %err, "Failed to pin message"),
-            };
-        }
-        .in_current_span(),
-    );
-
+                    Err(err) => error!(error = %err, "Failed to get pins"),
+                };
+                match msg_clone.pin(&_ctx).await {
+                    Ok(_) => {}
+                    Err(err) => error!(error = %err, "Failed to pin message"),
+                };
+            }
+            .in_current_span(),
+        );
+    }
     Ok(())
 }
 
@@ -352,7 +353,8 @@ pub async fn handle_modal(
                             Some(true),
                         )
                         .await?;
-                        conn.query(ctx, channel, &event.user, query, vars).await?;
+                        conn.query(ctx, channel, None, &event.user, query, vars)
+                            .await?;
                     }
                     Err(err) => {
                         debug!(err = ?err, "Failed to parse big query");

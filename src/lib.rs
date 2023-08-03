@@ -10,9 +10,13 @@ pub mod utils;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serenity::{
+    builder::CreateEmbed,
     http::Http,
     model::{
-        prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
+        prelude::{
+            application_command::ApplicationCommandInteraction, component::ButtonStyle::Primary,
+            AttachmentType, ChannelId,
+        },
         user::User,
     },
     prelude::Context,
@@ -49,7 +53,7 @@ pub struct Conn {
     require_query: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConnType {
     ConnectedChannel,
     EphemeralChannel,
@@ -66,7 +70,7 @@ impl Conn {
         while let Ok(v) = r.recv().await {
             acc.extend_from_slice(&v);
 
-            if acc.len() < utils::MAX_FILE_SIZE {
+            if acc.len() > utils::MAX_FILE_SIZE {
                 return Ok(None);
             }
         }
@@ -82,51 +86,101 @@ impl Conn {
         &self,
         ctx: &Context,
         channel: &ChannelId,
+        interaction: Option<&ApplicationCommandInteraction>,
         user: &User,
         query: impl IntoQuery + std::fmt::Display,
         vars: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<(), anyhow::Error> {
-        let query_message = channel
-            .send_message(&ctx, |mut m| {
-                m = m
-                    .embed(|mut e| {
-                        e = e.title(BIG_QUERY_SENT_KEY);
-                        e = e.description(format!("```sql\n{query:#}\n```"));
-                        e.author(|a| {
-                            a.name(&user.name)
-                                .icon_url(user.avatar_url().unwrap_or_default())
-                        })
-                    })
-                    .components(|c| {
-                        c.create_action_row(|r| {
-                            r.create_button(|b| {
-                                b.custom_id("configurable_session:big_query")
-                                    .label("New Big Query please")
-                                    .style(Primary)
-                                    .emoji('📝')
-                            })
-                            .create_button(|b| {
-                                b.custom_id("configurable_session:copy_big_query")
-                                    .label("Copy this Big Query")
-                                    .style(Primary)
-                                    .emoji('🔁')
+        let query_message = match interaction {
+            Some(i) => {
+                i.create_interaction_response(ctx, |r| {
+                    r.interaction_response_data(|m| {
+                        m.embed(|mut e| {
+                            e = e.title(BIG_QUERY_SENT_KEY);
+                            e = e.description(format!("```sql\n{query:#}\n```"));
+                            e.author(|a| {
+                                a.name(&user.name)
+                                    .icon_url(user.avatar_url().unwrap_or_default())
                             })
                         })
-                    });
-                if let Some(vars) = &vars {
-                    m.add_embed(|mut e| {
-                        e = e.title(BIG_QUERY_VARS_KEY);
-                        e = e.description(format!(
-                            "```json\n{:#}\n```",
-                            serde_json::to_string_pretty(&vars).unwrap_or_default()
-                        ));
-                        e
+                        .components(|c| {
+                            c.create_action_row(|r| {
+                                r.create_button(|b| {
+                                    b.custom_id("configurable_session:big_query")
+                                        .label("New Big Query please")
+                                        .style(Primary)
+                                        .emoji('📝')
+                                })
+                                .create_button(|b| {
+                                    b.custom_id("configurable_session:copy_big_query")
+                                        .label("Copy this Big Query")
+                                        .style(Primary)
+                                        .emoji('🔁')
+                                })
+                            })
+                        });
+                        if let Some(vars) = &vars {
+                            m.add_embed({
+                                let mut e = CreateEmbed::default();
+                                e.title(BIG_QUERY_VARS_KEY);
+                                e.description(format!(
+                                    "```json\n{:#}\n```",
+                                    serde_json::to_string_pretty(&vars).unwrap_or_default()
+                                ));
+                                e
+                            })
+                        } else {
+                            m
+                        }
                     })
-                } else {
-                    m
-                }
-            })
-            .await?;
+                })
+                .await?;
+                i.get_interaction_response(ctx).await?
+            }
+            None => {
+                channel
+                    .send_message(&ctx, |mut m| {
+                        m = m
+                            .embed(|mut e| {
+                                e = e.title(BIG_QUERY_SENT_KEY);
+                                e = e.description(format!("```sql\n{query:#}\n```"));
+                                e.author(|a| {
+                                    a.name(&user.name)
+                                        .icon_url(user.avatar_url().unwrap_or_default())
+                                })
+                            })
+                            .components(|c| {
+                                c.create_action_row(|r| {
+                                    r.create_button(|b| {
+                                        b.custom_id("configurable_session:big_query")
+                                            .label("New Big Query please")
+                                            .style(Primary)
+                                            .emoji('📝')
+                                    })
+                                    .create_button(|b| {
+                                        b.custom_id("configurable_session:copy_big_query")
+                                            .label("Copy this Big Query")
+                                            .style(Primary)
+                                            .emoji('🔁')
+                                    })
+                                })
+                            });
+                        if let Some(vars) = &vars {
+                            m.add_embed(|mut e| {
+                                e = e.title(BIG_QUERY_VARS_KEY);
+                                e = e.description(format!(
+                                    "```json\n{:#}\n```",
+                                    serde_json::to_string_pretty(&vars).unwrap_or_default()
+                                ));
+                                e
+                            })
+                        } else {
+                            m
+                        }
+                    })
+                    .await?
+            }
+        };
         let mut query = self.db.query(query);
         if let Some(vars) = vars {
             query = query.bind(vars);
