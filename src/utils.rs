@@ -1,5 +1,4 @@
-use std::{borrow::Cow, cmp::Ordering, path::Path};
-use std::cmp::Ordering;
+use std::{borrow::Cow, cmp::Ordering};
 
 use once_cell::sync::Lazy;
 use serenity::{
@@ -286,7 +285,7 @@ pub async fn system_message<'a>(
     description: impl ToString,
     success: Option<bool>,
     mentions: Option<String>,
-    file: Option<&'a Path>,
+    file: Option<AttachmentType<'_>>,
 ) -> Result<(), anyhow::Error> {
     channel.send_message(&ctx, |m| {
         let m = m.embed(|e| {

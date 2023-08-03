@@ -7,10 +7,6 @@ use crate::{
         SURREALDB_VERSION,
     },
     ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DBCONNS,
-        clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
-        success_user_interaction,
-    },
-    ConnType, DB, DBCONNS,
 };
 
 use anyhow::Result;

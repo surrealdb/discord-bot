@@ -4,9 +4,6 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
 use crate::utils::{ephemeral_interaction, CmdError};
-use crate::utils::interaction_reply;
-use crate::utils::interaction_reply_edit;
-use crate::utils::interaction_reply_ephemeral;
 use crate::DBCONNS;
 
 pub async fn run(

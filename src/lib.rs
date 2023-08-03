@@ -198,14 +198,13 @@ impl Conn {
 pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
     for (c, conn) in DBCONNS.lock().await.iter() {
         let channel = ChannelId::from(*c);
-        match conn.export("shutdown_export").await {
-            Ok(Some(path)) => {
+        match conn.export_to_attachment().await {
+            Ok(Some(attchment)) => {
                 channel.send_message(&http, |m| {
                     m.embed(|e| {
                         e.title("Pre-shutdown DB Exported successfully").description("Sorry! The bot had to go offline for maintenance, your session has been exported. You can find the .surql file attached.\nYou can either use `/reconnect` and load a new session with it when the bot is back online, or use it locally with `surreal import` CLI.").color(0x00ff00)
-                    }).add_file(&path)
+                    }).add_file(attchment)
                 }).await?;
-                tokio::fs::remove_file(path).await?;
             }
             Ok(None) => {
                 warn!("Export was too big")
