@@ -1,16 +1,19 @@
-use std::{cmp::Ordering, env, path::Path};
+use std::{borrow::Cow, cmp::Ordering, path::Path};
 
 use once_cell::sync::Lazy;
 use serenity::{
-    builder::CreateInteractionResponse,
+    builder::{CreateInteractionResponse, EditInteractionResponse},
     json::{self, Value},
     model::{
         prelude::{
             application_command::{
                 ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
             },
-            AttachmentType, ChannelId, GuildChannel, InteractionId, InteractionResponseType,
-            Message, PermissionOverwrite, PermissionOverwriteType,
+            command::CommandOptionType,
+            message_component::MessageComponentInteraction,
+            modal::ModalSubmitInteraction,
+            AttachmentType, ChannelId, GuildChannel, InteractionId, Message, PermissionOverwrite,
+            PermissionOverwriteType,
         },
         user::User,
         Permissions,
@@ -19,146 +22,295 @@ use serenity::{
 };
 use surrealdb::{
     engine::local::{Db, Mem},
-    Surreal, opt::auth::Root,
+    opt::auth::Root,
+    Surreal,
 };
-use tokio::{
-    fs,
-    time::{sleep_until, Instant},
-};
+use tokio::time::{sleep_until, Instant};
 use tracing::Instrument;
 
 use crate::{config::Config, db_utils::get_config, Conn, ConnType, DBCONNS};
 
 pub const MAX_FILE_SIZE: usize = 24_000_000;
 
-pub async fn interaction_reply(
-    command: &ApplicationCommandInteraction,
-    ctx: Context,
-    content: impl ToString,
-) -> Result<(), anyhow::Error> {
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(content))
-        })
-        .await?;
-    Ok(())
+pub enum CmdError {
+    NoSubCommand,
+    InvalidSubCommand(String),
+    InvalidArgument(String, Option<anyhow::Error>),
+    ExpectedArgument(String),
+    UnexpectedArgumentType(CommandOptionType),
+    TooManyArguments(usize, usize),
+    NoSession,
+    ExpectedNoSession,
+    NoGuild,
+    NoConfig,
+    GetConfig(surrealdb::Error),
+    UpdateConfig(surrealdb::Error),
+    BuildConfig,
+    UnknownDataset(String),
+    ExportFailed(anyhow::Error),
+    ExportTooLarge,
+    BadQuery(surrealdb::Error),
+    AttachmentDownload(anyhow::Error),
 }
 
-pub async fn interaction_reply_ephemeral(
-    command: &ApplicationCommandInteraction,
-    ctx: Context,
-    content: impl ToString,
-) -> Result<(), anyhow::Error> {
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(content).ephemeral(true))
-        })
-        .await?;
-    Ok(())
+impl CmdError {
+    fn message<'a>(&self) -> (Cow<'a, str>, Cow<'a, str>) {
+        match self {
+            CmdError::NoSubCommand => (
+                "Invalid command".into(),
+                "Please specify a subcommand".into(),
+            ),
+            CmdError::InvalidSubCommand(subcommand) => (
+                "Invalid command".into(),
+                format!("Please specify a valid subcommand.\n`{}` is not a valid subcommand.", subcommand).into(),
+            ),
+            CmdError::TooManyArguments(expected, got) => (
+                "Too many arguments".into(),
+                format!("Expected {} arguments, got {}.", expected, got).into(),
+            ),
+            CmdError::InvalidArgument(argument, maybe_error) => (
+                "Invalid argument".into(),
+                format!("There was an issue parsing `{}`.{}", argument, match maybe_error {
+                    Some(e) => format!(" It returned the following error:\n```rust\n{}\n```", e),
+                    None => "".to_string()
+                }).into(),
+            ),
+            CmdError::ExpectedArgument(note) => (
+                "Expected an argument".into(),
+                format!("Expected an argument, please supply {note}.").into(),
+            ),
+            CmdError::UnexpectedArgumentType(opt) => (
+                "Unexpected argument type".into(),
+                format!("Got {opt:?}, this option is not supported for this argument.").into(),
+            ),
+            CmdError::NoSession => (
+                "Session expired or terminated".into(),
+                "There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.".into()
+            ),
+            CmdError::ExpectedNoSession => (
+                "Session already exists".into(),
+                "There is already a database instance associated with this channel!\nPlease use `Stop session` above to stop current SurrealDB instance or use `/config_update` to update current session configuration.".into()
+            ),
+            CmdError::NoGuild => (
+                "Not in a server".into(),
+                "Direct messages are not currently supported".into(),
+            ),
+            CmdError::NoConfig => (
+                "Server config not found".into(),
+                "No config found for this server, please ask an administrator to configure the bot!".into(),
+            ),
+            CmdError::GetConfig(e) => (
+                "Error while querying for server config".into(),
+                format!("Database error:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::UpdateConfig(e) => (
+                "Error while updating server config".into(),
+                format!("Database error:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::BuildConfig => (
+                "Error while building server config".into(),
+                "Please check your config and try again.".into(),
+            ),
+            CmdError::UnknownDataset(dataset) => (
+                "Unknown dataset".into(),
+                format!("The dataset `{}` does not exist.", dataset).into(),
+            ),
+            CmdError::ExportTooLarge => (
+                "Export too large".into(),
+                "The export is too large to send, sorry.".to_string().into(),
+            ),
+            CmdError::ExportFailed(e) => (
+                "Export failed".into(),
+                format!("There was an error while exporting the database:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::BadQuery(e) => (
+                "Query parse failed".into(),
+                format!("There was an error while parsing the query:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::AttachmentDownload(e) => (
+                "Attachment download failed".into(),
+                format!("There was an error while loading the attachment:\n```rust\n{e}\n```").into(),
+            ),
+        }
+    }
+
+    pub async fn reply(
+        &self,
+        ctx: &Context,
+        interaction: impl ToInteraction,
+    ) -> Result<(), anyhow::Error> {
+        let (title, description) = self.message();
+        ephemeral_interaction(ctx, interaction, title, description, Some(false)).await
+    }
+
+    pub async fn edit(
+        &self,
+        ctx: &Context,
+        interaction: impl ToInteraction,
+    ) -> Result<(), anyhow::Error> {
+        let (title, description) = self.message();
+        ephemeral_interaction_edit(ctx, interaction, title, description, Some(false)).await
+    }
 }
 
-pub async fn interaction_reply_edit(
-    command: &ApplicationCommandInteraction,
-    ctx: Context,
-    content: impl ToString,
-) -> Result<(), anyhow::Error> {
-    command
-        .edit_original_interaction_response(&ctx.http, |response| response.content(content))
-        .await?;
-    Ok(())
+/// ToInteraction is a trait that allows for easy conversion of different interaction types to a tuple of the interaction id and token.
+pub trait ToInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str);
 }
 
-pub async fn interaction_followup(
-    command: &ApplicationCommandInteraction,
-    ctx: Context,
-    content: impl ToString,
-) -> Result<(), anyhow::Error> {
-    command
-        .create_followup_message(&ctx.http, |response| response.content(content))
-        .await?;
-    Ok(())
+impl ToInteraction for &ApplicationCommandInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
 }
 
-/// Interaction-source independent function to create a success interaction message.
-pub async fn success_ephemeral_interaction<DT: ToString, DD: ToString>(
+impl ToInteraction for &MessageComponentInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
+}
+
+impl ToInteraction for &ModalSubmitInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
+}
+
+impl ToInteraction for (&InteractionId, &str) {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        ((self.0), (self.1))
+    }
+}
+
+pub async fn ephemeral_interaction_edit(
     ctx: &Context,
-    iid: &InteractionId,
-    token: &str,
-    title: DT,
-    description: DD,
+    interaction: impl ToInteraction,
+    title: impl ToString,
+    description: impl ToString,
+    success: Option<bool>,
+) -> Result<(), anyhow::Error> {
+    let mut interaction_response = EditInteractionResponse::default();
+    interaction_response.embed(|e| {
+        let e = e
+            .title(title.to_string())
+            .description(description.to_string());
+
+        match success {
+            Some(true) => e.color(0x00ff00),
+            Some(false) => e.color(0xff0000),
+            None => e,
+        }
+    });
+
+    let map = json::hashmap_to_json_map(interaction_response.0);
+    let (_, token) = interaction.to_interaction();
+    ctx.http
+        .edit_original_interaction_response(token, &Value::from(map))
+        .await?;
+    Ok(())
+}
+
+/// Interaction-source independent function to create an ephemeral interaction message.
+pub async fn ephemeral_interaction(
+    ctx: &Context,
+    interaction: impl ToInteraction,
+    title: impl ToString,
+    description: impl ToString,
+    success: Option<bool>,
 ) -> Result<(), anyhow::Error> {
     let mut interaction_response = CreateInteractionResponse::default();
     interaction_response.interaction_response_data(|d| {
         d.embed(|e| {
-            e.title(title.to_string())
-                .description(description.to_string())
-                .color(0x00ff00)
+            let e = e
+                .title(title.to_string())
+                .description(description.to_string());
+
+            match success {
+                Some(true) => e.color(0x00ff00),
+                Some(false) => e.color(0xff0000),
+                None => e,
+            }
         })
         .ephemeral(true)
     });
 
     let map = json::hashmap_to_json_map(interaction_response.0);
+    let (iid, token) = interaction.to_interaction();
     ctx.http
         .create_interaction_response(iid.0, token, &Value::from(map))
         .await?;
     Ok(())
 }
 
-/// Interaction-source independent function to create a failure interaction message.
-pub async fn failure_ephemeral_interaction<DT: ToString, DD: ToString>(
+/// Interaction-source independent function to create a logged interaction message for a specific user.
+pub async fn user_interaction(
     ctx: &Context,
-    iid: &InteractionId,
-    token: &str,
-    title: DT,
-    description: DD,
-) -> Result<(), anyhow::Error> {
-    let mut interaction_response = CreateInteractionResponse::default();
-    interaction_response.interaction_response_data(|d| {
-        d.embed(|e| {
-            e.title(title.to_string())
-                .description(description.to_string())
-                .color(0xff0000)
-        })
-        .ephemeral(true)
-    });
-
-    let map = json::hashmap_to_json_map(interaction_response.0);
-    ctx.http
-        .create_interaction_response(iid.0, token, &Value::from(map))
-        .await?;
-    Ok(())
-}
-
-/// Interaction-source independent function to create a logged success interaction message for a specific user.
-pub async fn success_user_interaction<DT: ToString, DD: ToString>(
-    ctx: &Context,
-    iid: &InteractionId,
-    token: &str,
+    interaction: impl ToInteraction,
     user: &User,
-    title: DT,
-    description: DD,
+    title: impl ToString,
+    description: impl ToString,
+    success: Option<bool>,
 ) -> Result<(), anyhow::Error> {
     let mut interaction_response = CreateInteractionResponse::default();
     interaction_response.interaction_response_data(|d| {
         d.embed(|e| {
-            e.title(title.to_string())
+            let e = e
+                .title(title.to_string())
                 .description(description.to_string())
-                .color(0x00ff00)
                 .author(|a| {
                     a.name(&user.name)
                         .icon_url(user.avatar_url().unwrap_or_default())
-                })
+                });
+            match success {
+                Some(true) => e.color(0x00ff00),
+                Some(false) => e.color(0xff0000),
+                None => e,
+            }
         })
     });
 
     let map = json::hashmap_to_json_map(interaction_response.0);
+    let (iid, token) = interaction.to_interaction();
     ctx.http
         .create_interaction_response(iid.0, token, &Value::from(map))
         .await?;
+    Ok(())
+}
+
+/// Interaction-source independent function to create a logged interaction message for system with optional mentions.
+pub async fn system_message<'a>(
+    ctx: &Context,
+    channel: &ChannelId,
+    title: impl ToString,
+    description: impl ToString,
+    success: Option<bool>,
+    mentions: Option<String>,
+    file: Option<&'a Path>,
+) -> Result<(), anyhow::Error> {
+    channel.send_message(&ctx, |m| {
+        let m = m.embed(|e| {
+            let e = e.title(title.to_string())
+                .description(description.to_string())
+                .author(|a| {
+                    a.name("System").icon_url("https://cdn.discordapp.com/icons/902568124350599239/cba8276fd365c07499fdc349f55535be.webp?size=240")
+                });
+            match success {
+                Some(true) => e.color(0x00ff00),
+                Some(false) => e.color(0xff0000),
+                None => e,
+            }
+        });
+        let m = if let Some(mentions) = mentions {
+            m.content(mentions)
+        } else {
+            m
+        };
+        if let Some(path) = file {
+            m.add_file(path)
+        } else {
+            m
+        }
+    }).await?;
     Ok(())
 }
 
@@ -178,49 +330,67 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
     let entry = DBCONNS.lock().await.remove(channel.id.as_u64());
 
     if let Some(conn) = entry {
-        channel
-            .say(
-                &ctx,
-                ":information_source: This database instance has expired and is no longer functional",
-            )
-            .await
-            .ok();
-
-        let base_path = match env::var("TEMP_DIR_PATH") {
-            Ok(p) => p,
-            Err(_) => {
-                fs::create_dir("tmp").await.ok();
-                "tmp/".to_string()
-            }
+        match system_message(
+            ctx,
+            &channel.id,
+            "Session expired or terminated",
+            "This database instance has expired or was terminated and is no longer functional.",
+            Some(false),
+            None,
+            None,
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => error!("Failed to send system message: {}", e),
         };
-        let path = format!("{base_path}{}.surql", channel.id.as_u64());
 
-        match conn.db.export(&path).await {
-            Ok(_) => {
-                if let Ok(metadata) = fs::metadata(&path).await {
-                    if metadata.len() < MAX_FILE_SIZE as u64 {
-                        channel
-                            .send_message(&ctx, |m| {
-                                m.content("Database exported:").add_file(Path::new(&path))
-                            })
-                            .await
-                            .ok();
-                    } else {
-                        channel.send_message(&ctx, |m| m.content(":x: Your database is too powerful, (the export is too large to send)")).await.ok();
-                    }
+        match conn.export("expired_session").await {
+            Ok(Some(path)) => {
+                match system_message(
+                    ctx,
+                    &channel.id,
+                    "Cleanup DB Exported successfully",
+                    "You can find your exported DB attached.",
+                    Some(true),
+                    None,
+                    Some(&path),
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to send system message: {}", e),
                 }
-
-                fs::remove_file(path).await.ok();
+                match tokio::fs::remove_file(path).await {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to remove file: {}", e),
+                }
             }
-            Err(why) => {
-                channel
-                    .send_message(&ctx, |m| {
-                        m.content(format!(":x: Database export failed: {why}"))
-                    })
-                    .await
-                    .ok();
+            Ok(None) => {
+                warn!("Export was too big");
+                match system_message(ctx, &channel.id, "Can't upload DB", "Your database is too powerful, it is now gone. (the export was too large to send)", Some(true), None, None).await {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to send system message: {}", e),
+                }
             }
-        };
+            Err(err) => {
+                error!(error = %err, "Failed to export session");
+                match system_message(
+                    ctx,
+                    &channel.id,
+                    "Failed to export",
+                    format!("Database export failed:\n```rust\n{err}\n```"),
+                    Some(false),
+                    None,
+                    None,
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(e) => error!("Failed to send system message: {}", e),
+                }
+            }
+        }
     }
 
     let result = get_config(channel.guild_id).await;
@@ -356,51 +526,59 @@ pub async fn load_attachment(
     channel: GuildChannel,
 ) -> Result<(), anyhow::Error> {
     if let Some(CommandDataOptionValue::Attachment(attachment)) = op_option.resolved {
-        interaction_reply(
+        ephemeral_interaction(
+            &ctx,
             command,
-            ctx.clone(),
+            "Downloading your file...",
             format!(
                 ":information_source: Your file ({}) is now being downloaded!",
                 attachment.filename
             ),
+            None,
         )
         .await?;
         match attachment.download().await {
             Ok(data) => {
-                interaction_reply_edit(command, ctx.clone(), ":information_source: Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_".to_string()).await?;
-
+                ephemeral_interaction_edit(&ctx, command, "Downloaded, importing...", "Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_", None).await?;
                 let db = db.clone();
                 let (_channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
-                tokio::spawn(async move {
-                    if let Err(why) = db.query(String::from_utf8_lossy(&data).into_owned()).await {
-                        interaction_reply_edit(
+                tokio::spawn(
+                    async move {
+                        if let Err(why) =
+                            db.query(String::from_utf8_lossy(&data).into_owned()).await
+                        {
+                            CmdError::BadQuery(why).edit(&ctx, &command).await.unwrap();
+                            return;
+                        }
+                        ephemeral_interaction_edit(
+                            &ctx,
                             &command,
-                            ctx,
-                            format!(":x: Error importing from file, please ensure that files are valid SurrealQL: {}", why),
+                            "Imported",
+                            "Your data is now loaded and ready to query!",
+                            Some(true),
                         )
                         .await
                         .unwrap();
-                        return;
                     }
-                    interaction_reply_edit(
-                        &command,
-                        ctx,
-                        ":information_source: Your data is now loaded and ready to query!".to_string(),
-                    )
-                    .await
-                    .unwrap();
-                }.in_current_span());
+                    .in_current_span(),
+                );
                 Ok(())
             }
             Err(why) => {
-                interaction_reply_edit(command, ctx, format!(":x: Error with attachment: {}", why))
-                    .await?;
-                Ok(())
+                CmdError::AttachmentDownload(why.into())
+                    .edit(&ctx, command)
+                    .await
             }
         }
     } else {
-        interaction_reply_edit(command, ctx, ":x: Error with attachment").await?;
-        Ok(())
+        ephemeral_interaction_edit(
+            &ctx,
+            command,
+            "Error with attachment",
+            "Unknown error with attachment",
+            Some(false),
+        )
+        .await
     }
 }
 
@@ -410,18 +588,29 @@ pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, a
     let db_config = surrealdb::opt::Config::new()
         .query_timeout(server_config.timeout)
         .transaction_timeout(server_config.timeout);
-    let db = Surreal::new::<Mem>((db_config, Root{username: "root", password: "root"})).await?;
+    let db = Surreal::new::<Mem>((
+        db_config,
+        Root {
+            username: "root",
+            password: "root",
+        },
+    ))
+    .await?;
 
     db.use_ns("test").use_db("test").await?;
-    
-    db.signin(Root{username: "root", password: "root"}).await?;
+
+    db.signin(Root {
+        username: "root",
+        password: "root",
+    })
+    .await?;
 
     Ok(db)
 }
 
-const LOCK_FILE: &str = include_str!("../Cargo.lock");
+static LOCK_FILE: &str = include_str!("../Cargo.lock");
 
-pub const SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
+pub static SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
     let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
     let package = lock
         .packages
@@ -437,7 +626,7 @@ pub const SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
     }
 });
 
-pub const BOT_VERSION: Lazy<String> = Lazy::new(|| {
+pub static BOT_VERSION: Lazy<String> = Lazy::new(|| {
     let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
     let package = lock
         .packages

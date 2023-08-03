@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use serde_json::Value;
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandOption},
@@ -9,67 +9,9 @@ use surrealdb::opt::auth::{Database, Namespace, Root, Scope};
 use tokio::time::Instant;
 
 use crate::{
-    utils::{failure_ephemeral_interaction, success_user_interaction},
+    utils::{ephemeral_interaction, user_interaction, CmdError},
     DBCONNS,
 };
-
-enum CmdError {
-    NoSubCommand,
-    InvalidSubCommand(String),
-    InvalidArgument(String, Option<Error>),
-    NoSession,
-    NoGuild,
-}
-
-impl CmdError {
-    async fn reply(
-        &self,
-        ctx: &Context,
-        iid: &InteractionId,
-        token: &str,
-    ) -> Result<(), anyhow::Error> {
-        match self {
-            CmdError::NoSubCommand => failure_ephemeral_interaction(
-                ctx,
-                iid,
-                token,
-                "Invalid command",
-                "Please specify a subcommand",
-            ).await,
-            CmdError::InvalidSubCommand(subcommand) => failure_ephemeral_interaction(
-                ctx,
-                iid,
-                token,
-                "Invalid command",
-                format!("Please specify a valid subcommand.\n`{}` is not a valid subcommand.", subcommand),
-            ).await,
-            CmdError::InvalidArgument(argument, maybe_error) => failure_ephemeral_interaction(
-                ctx,
-                iid,
-                token,
-                "Invalid argument",
-                format!("There was an issue parsing `{}`.{}", argument, match maybe_error {
-                    Some(e) => format!(" It returned the following error:\n```rust\n{}\n```", e),
-                    None => "".to_string()
-                }),
-            ).await,
-            CmdError::NoSession => failure_ephemeral_interaction(
-                ctx,
-                iid,
-                token,
-                "Session expired or terminated",
-                "There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance."
-            ).await,
-            CmdError::NoGuild => failure_ephemeral_interaction(
-                ctx,
-                iid,
-                token,
-                "Not in a server",
-                "Direct messages are not currently supported",
-            ).await
-        }
-    }
-}
 
 /// auth
 /// - signup
@@ -96,25 +38,11 @@ pub async fn run(
             };
 
             match (command.data.options.first(), db) {
-                (
-                    Some(&CommandDataOption {
-                        ref name,
-                        ref options,
-                        ..
-                    }),
-                    Ok(db),
-                ) => match name.as_str() {
+                (Some(CommandDataOption { name, options, .. }), Ok(db)) => match name.as_str() {
                     "signup" => match options.first() {
-                        Some(&CommandDataOption {
-                            ref name,
-                            ref options,
-                            ..
-                        }) => match name.as_str() {
+                        Some(CommandDataOption { name, options, .. }) => match name.as_str() {
                             "scope" => match scope_options(options) {
-                                Ok(scope) => Ok(db
-                                    .signup(scope)
-                                    .await
-                                    .map(|_| "SCOPE")),
+                                Ok(scope) => Ok(db.signup(scope).await.map(|_| "SCOPE")),
                                 Err(err) => Err(err),
                             },
                             _ => Err(CmdError::InvalidSubCommand(name.to_string())),
@@ -122,36 +50,21 @@ pub async fn run(
                         None => Err(CmdError::NoSubCommand),
                     },
                     "signin" => match options.first() {
-                        Some(&CommandDataOption {
-                            ref name,
-                            ref options,
-                            ..
-                        }) => match name.as_str() {
+                        Some(CommandDataOption { name, options, .. }) => match name.as_str() {
                             "scope" => match scope_options(options) {
-                                Ok(scope) => Ok(db
-                                    .signin(scope)
-                                    .await
-                                    .map(|_| "SCOPE")),
+                                Ok(scope) => Ok(db.signin(scope).await.map(|_| "SCOPE")),
                                 Err(err) => Err(err),
                             },
                             "db" => match database_options(options) {
-                                Ok(scope) => Ok(db
-                                    .signin(scope)
-                                    .await
-                                    .map(|_| "DB")),
+                                Ok(scope) => Ok(db.signin(scope).await.map(|_| "DB")),
                                 Err(err) => Err(err),
                             },
                             "ns" => match namespace_options(options) {
-                                Ok(scope) => Ok(db
-                                    .signin(scope)
-                                    .await
-                                    .map(|_| "NS")),
+                                Ok(scope) => Ok(db.signin(scope).await.map(|_| "NS")),
                                 Err(err) => Err(err),
                             },
                             "root" => match root_options(options) {
-                                Ok(scope) => {
-                                    Ok(db.signin(scope).await.map(|_| "ROOT"))
-                                }
+                                Ok(scope) => Ok(db.signin(scope).await.map(|_| "ROOT")),
                                 Err(err) => Err(err),
                             },
                             _ => Err(CmdError::InvalidSubCommand(name.to_string())),
@@ -171,42 +84,42 @@ pub async fn run(
                         .map(|_| "ROOT")),
                     _ => Err(CmdError::InvalidSubCommand(name.to_string())),
                 },
-                (_, Err(e)) => Err(e.into()),
+                (_, Err(e)) => Err(e),
                 (None, _) => Err(CmdError::NoSubCommand),
             }
         }
-        None => Err(CmdError::NoGuild.into()),
+        None => Err(CmdError::NoGuild),
     };
 
     match res {
         Ok(Ok(new_state)) => {
-            success_user_interaction(
+            user_interaction(
                 &ctx,
-                &command.id,
-                &command.token,
+                command,
                 &command.user,
                 "Auth successful",
-                format!("Session auth changed to `{new_state}`, you can now query under that scope.\nAlternatively you can reset it back root by using either `/auth signin root root root` or `/auth reset`."),
+                format!("Session auth changed to `{new_state}`, you can now query under that scope.\nAlternatively you can reset it back root by using `/auth reset`."),
+                Some(true),
             )
             .await
         }
         Ok(Err(err)) => {
-            failure_ephemeral_interaction(
+            ephemeral_interaction(
                 &ctx,
-                &command.id,
-                &command.token,
+                command,
                 "Failed to auth",
                 format!("Auth method errored:\n```rust\n{}\n```", err),
+                Some(false)
             )
             .await
         }
-        Err(err) => err.reply(&ctx, &command.id, &command.token).await,
+        Err(err) => err.reply(&ctx, command).await,
     }
 }
 
 type AuthHashmap = std::collections::HashMap<String, Value>;
 
-fn scope_options<'a>(options: &'a [CommandDataOption]) -> Result<Scope<'a, AuthHashmap>, CmdError> {
+fn scope_options(options: &[CommandDataOption]) -> Result<Scope<'_, AuthHashmap>, CmdError> {
     let namespace = string_argument_by_name(options, "namespace")?;
     let database = string_argument_by_name(options, "database")?;
     let scope = string_argument_by_name(options, "scope")?;
@@ -226,14 +139,14 @@ fn scope_options<'a>(options: &'a [CommandDataOption]) -> Result<Scope<'a, AuthH
     })
 }
 
-fn root_options<'a>(options: &'a [CommandDataOption]) -> Result<Root<'a>, CmdError> {
+fn root_options(options: &[CommandDataOption]) -> Result<Root<'_>, CmdError> {
     let username = string_argument_by_name(options, "username")?;
     let password = string_argument_by_name(options, "password")?;
 
     Ok(Root { username, password })
 }
 
-fn namespace_options<'a>(options: &'a [CommandDataOption]) -> Result<Namespace<'a>, CmdError> {
+fn namespace_options(options: &[CommandDataOption]) -> Result<Namespace<'_>, CmdError> {
     let namespace = string_argument_by_name(options, "namespace")?;
     let username = string_argument_by_name(options, "username")?;
     let password = string_argument_by_name(options, "password")?;
@@ -245,7 +158,7 @@ fn namespace_options<'a>(options: &'a [CommandDataOption]) -> Result<Namespace<'
     })
 }
 
-fn database_options<'a>(options: &'a [CommandDataOption]) -> Result<Database<'a>, CmdError> {
+fn database_options(options: &[CommandDataOption]) -> Result<Database<'_>, CmdError> {
     let namespace = string_argument_by_name(options, "namespace")?;
     let database = string_argument_by_name(options, "database")?;
     let username = string_argument_by_name(options, "username")?;

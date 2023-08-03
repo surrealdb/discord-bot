@@ -3,10 +3,10 @@ use std::{borrow::Cow, sync::Arc};
 use crate::{
     config::Config,
     utils::{
-        clean_channel, failure_ephemeral_interaction, success_ephemeral_interaction,
-        success_user_interaction, BOT_VERSION, SURREALDB_VERSION,
+        clean_channel, ephemeral_interaction, user_interaction, CmdError, BOT_VERSION,
+        SURREALDB_VERSION,
     },
-    ConnType, DBCONNS, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY,
+    ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DBCONNS,
 };
 
 use anyhow::Result;
@@ -89,35 +89,32 @@ pub async fn show(
     let ctx_clone = Arc::new(ctx.clone());
     let channel_clone = Arc::new(channel.clone());
     let msg_clone = Arc::new(msg);
-    tokio::spawn(async move {
-        let _ctx = &*ctx_clone;
-        match channel_clone.pins(&_ctx).await {
-            Ok(pins) => {
-                let old_pin = pins.iter().find(|m| {
-                    m.embeds
-                        .iter()
-                        .find(|e| {
+    tokio::spawn(
+        async move {
+            let _ctx = &*ctx_clone;
+            match channel_clone.pins(&_ctx).await {
+                Ok(pins) => {
+                    let old_pin = pins.iter().find(|m| {
+                        m.embeds.iter().any(|e| {
                             e.title
                                 .as_ref()
                                 .map_or(false, |t| t == "Your SurrealDB session")
                         })
-                        .is_some()
-                });
+                    });
 
-                match old_pin {
-                    Some(old_pin) => {
+                    if let Some(old_pin) = old_pin {
                         old_pin.unpin(&_ctx).await.unwrap();
                     }
-                    None => {}
                 }
-            }
-            Err(err) => error!(error = %err, "Failed to get pins"),
-        };
-        match msg_clone.pin(&_ctx).await {
-            Ok(_) => {}
-            Err(err) => error!(error = %err, "Failed to pin message"),
-        };
-    }.in_current_span());
+                Err(err) => error!(error = %err, "Failed to get pins"),
+            };
+            match msg_clone.pin(&_ctx).await {
+                Ok(_) => {}
+                Err(err) => error!(error = %err, "Failed to pin message"),
+            };
+        }
+        .in_current_span(),
+    );
 
     Ok(())
 }
@@ -148,12 +145,12 @@ pub async fn handle_component(
                 _ => unreachable!(),
             }
             DBCONNS.lock().await.insert(channel.0, db);
-            success_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
+            ephemeral_interaction(
+                ctx,
+                event,
                 "Config updated",
                 format!("{} is now set to {}", id, values[0]),
+                Some(true),
             )
             .await?;
         }
@@ -183,24 +180,10 @@ pub async fn handle_component(
                     tokio::fs::remove_file(path).await?;
                 }
                 Ok(None) => {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
-                        "Failed to export",
-                        "Export was too big...",
-                    )
-                    .await?;
+                    CmdError::ExportTooLarge.reply(ctx, event).await?;
                 }
                 Err(err) => {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
-                        "Failed to export",
-                        format!("{err:#?}"),
-                    )
-                    .await?;
+                    CmdError::ExportFailed(err).reply(ctx, event).await?;
                 }
             }
         }
@@ -212,7 +195,7 @@ pub async fn handle_component(
                     .await?
                     .guild()
                     .expect("our components are only available in guilds"),
-                &ctx,
+                ctx,
             )
             .await;
         }
@@ -314,14 +297,7 @@ pub async fn handle_component(
         }
         (_, false) => {
             info!("No connection found for channel");
-            failure_ephemeral_interaction(
-                &ctx,
-                &event.id,
-                &event.token,
-                "Session expired or terminated",
-                "There is no database instance currently associated with this channel!\nPlease use `/connect` to connect to a new SurrealDB instance.",
-            )
-            .await?;
+            CmdError::NoSession.reply(ctx, event).await?;
         }
         _ => {
             warn!(sub_id = id, "Unknown configurable_session component");
@@ -343,7 +319,7 @@ pub async fn handle_modal(
             if let ActionRowComponent::InputText(InputText { value, .. }) = &values[0].components[0]
             {
                 trace!(raw_query = value, "Received big query");
-                match surrealdb::sql::parse(&value) {
+                match surrealdb::sql::parse(value) {
                     Ok(query) => {
                         debug!(query = ?query, "Parsed big query successfully");
                         let conn = DBCONNS
@@ -360,12 +336,12 @@ pub async fn handle_modal(
                                     Ok(vars) => Some(vars),
                                     Err(err) => {
                                         debug!(err = ?err, "Failed to parse variables");
-                                        failure_ephemeral_interaction(
-                                            &ctx,
-                                            &event.id,
-                                            &event.token,
+                                        ephemeral_interaction(
+                                            ctx,
+                                            event,
                                             "Failed to parse big query variables!",
                                             format!("```rust\n{err:#}```"),
+                                            Some(false),
                                         )
                                         .await?;
                                         return Ok(());
@@ -375,27 +351,19 @@ pub async fn handle_modal(
                             _ => None,
                         };
                         // Gotta send a response interaction to let modal know we're processing the query
-                        success_ephemeral_interaction(
-                            &ctx,
-                            &event.id,
-                            &event.token,
+                        ephemeral_interaction(
+                            ctx,
+                            event,
                             "Big query processing...",
                             "Your query has been sent to the database and is processing now...",
+                            Some(true),
                         )
                         .await?;
-                        conn.query(&ctx, channel, &event.user, query, vars).await?;
+                        conn.query(ctx, channel, &event.user, query, vars).await?;
                     }
                     Err(err) => {
                         debug!(err = ?err, "Failed to parse big query");
-                        failure_ephemeral_interaction(
-                            &ctx,
-                            &event.id,
-                            &event.token,
-                            "Failed to parse big query!",
-                            format!("```sql\n{err:#}```"),
-                        )
-                        .await?;
-                        return Ok(());
+                        return CmdError::BadQuery(err.into()).reply(ctx, event).await;
                     }
                 }
             }
@@ -410,25 +378,25 @@ pub async fn handle_modal(
                     .expect("our components are only available in guilds")
                     .name;
                 if value == &channel_name {
-                    failure_ephemeral_interaction(
-                        &ctx,
-                        &event.id,
-                        &event.token,
+                    ephemeral_interaction(
+                        ctx,
+                        event,
                         "Failed to rename thread!",
                         "The new name is the same as the old name.",
+                        Some(false),
                     )
                     .await?;
                     return Ok(());
                 }
                 info!(old_name = %channel_name, new_name = %value, "Renaming thread");
                 channel.edit(&ctx, |c| c.name(value)).await?;
-                success_user_interaction(
-                    &ctx,
-                    &event.id,
-                    &event.token,
+                user_interaction(
+                    ctx,
+                    event,
                     &event.user,
                     "Thread renamed",
                     format!("The thread has been renamed to `{value}`"),
+                    Some(true),
                 )
                 .await?;
             }

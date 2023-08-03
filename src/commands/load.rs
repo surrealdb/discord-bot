@@ -14,9 +14,7 @@ use tracing::Instrument;
 
 use crate::premade;
 
-use crate::utils::{
-    interaction_reply, interaction_reply_edit, interaction_reply_ephemeral, load_attachment,
-};
+use crate::utils::{ephemeral_interaction, ephemeral_interaction_edit, load_attachment, CmdError};
 use crate::DBCONNS;
 
 pub async fn run(
@@ -24,13 +22,9 @@ pub async fn run(
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
     if command.data.options.is_empty() {
-        interaction_reply_ephemeral(
-            command,
-            ctx,
-            ":information_source: Please select a premade dataset or supply a SurrealQL file to load",
-        )
-        .await?;
-        return Ok(());
+        return CmdError::ExpectedArgument("a file or premade dataset to load".to_string())
+            .reply(&ctx, command)
+            .await;
     }
     match command.guild_id {
         Some(_guild_id) => {
@@ -41,16 +35,14 @@ pub async fn run(
                     c.last_used = Instant::now();
                     c.db.clone()
                 }
-                None => {
-                    interaction_reply_ephemeral(command, ctx, "Can't ").await?;
-                    return Ok(());
-                }
+                None => return CmdError::NoSession.reply(&ctx, command).await,
             };
 
             match command.data.options.len().cmp(&1) {
                 Ordering::Greater => {
-                    interaction_reply_ephemeral(command, ctx, ":information_source: Please only supply one argument (you can use the up arrow to edit the previous command)").await?;
-                    return Ok(());
+                    return CmdError::TooManyArguments(1, command.data.options.len())
+                        .reply(&ctx, command)
+                        .await;
                 }
                 Ordering::Equal => {
                     let op_option = command.data.options[0].clone();
@@ -83,27 +75,19 @@ pub async fn run(
                                 }
                                 dataset => {
                                     warn!(dataset, "Unknown dataset was requested");
-                                    interaction_reply_ephemeral(
-                                        command,
-                                        ctx,
-                                        "Cannot find requested dataset",
-                                    )
-                                    .await?;
-                                    return Ok(());
+                                    return CmdError::UnknownDataset(dataset.to_string())
+                                        .reply(&ctx, command)
+                                        .await;
                                 }
                             }
                         }
                         CommandOptionType::Attachment => {
                             load_attachment(op_option, command, ctx, db, channel).await?
                         }
-                        _ => {
-                            interaction_reply_ephemeral(
-                                command,
-                                ctx,
-                                ":x: Unsupported option type",
-                            )
-                            .await?;
-                            return Ok(());
+                        opt => {
+                            return CmdError::UnexpectedArgumentType(opt)
+                                .reply(&ctx, command)
+                                .await
                         }
                     }
                 }
@@ -112,14 +96,7 @@ pub async fn run(
 
             Ok(())
         }
-        None => {
-            interaction_reply(
-                command,
-                ctx,
-                ":warning: Direct messages are not currently supported".to_string(),
-            )
-            .await
-        }
+        None => CmdError::NoGuild.reply(&ctx, command).await,
     }
 }
 
@@ -147,51 +124,58 @@ async fn load_premade(
     schema_name: Option<&'static str>,
 ) -> Result<(), anyhow::Error> {
     {
-        interaction_reply(
-            command,
-            ctx.clone(),
-            format!(
-                ":information_source: The dataset is currently being loaded, soon you'll be able to query the {} dataset! \n_Please wait for a confirmation that the dataset is loaded!_",
-                name
-            ),
-        )
-        .await?;
+        ephemeral_interaction(&ctx, command,
+            "Loading premade dataset...",
+            format!("The dataset is currently being loaded, soon you'll be able to query the {name} dataset! \n_Please wait for a confirmation that the dataset is loaded!_"),
+            None,
+        ).await?;
+
         let db = db.clone();
         let (channel, ctx, command) = (channel.clone(), ctx.clone(), command.clone());
-        tokio::spawn(async move {
-            match db.import(format!("premade/{}", file_name)).await {
-                Ok(_) => {
-                    interaction_reply_edit(
-                        &command,
-                        ctx.clone(),
-                        format!(
-                            ":white_check_mark: The dataset is now loaded and you can query the {} dataset!",
-                            name
-                        ),
-                    )
-                    .await
-                    .unwrap();
-                    if let Some(scheme_file_name) = schema_name {
-                        channel
-                            .send_files(
-                                ctx,
-                                [AttachmentType::Path(Path::new(&format!(
-                                    "premade/{}",
-                                    scheme_file_name
-                                )))],
-                                |m| m.content("schema:"),
-                            )
-                            .await
-                            .unwrap();
-                    }
-                }
-                Err(why) => {
-                    interaction_reply_edit(&command, ctx, format!(":x: Error loading data: {}", why))
+        tokio::spawn(
+            async move {
+                match db.import(format!("premade/{}", file_name)).await {
+                    Ok(_) => {
+                        ephemeral_interaction_edit(
+                            &ctx,
+                            &command,
+                            "Premade dataset loaded!",
+                            format!(
+                                "The dataset is now loaded and you can query the {name} dataset!"
+                            ),
+                            Some(true),
+                        )
                         .await
                         .unwrap();
-                }
-            };
-        }.in_current_span());
+                        if let Some(scheme_file_name) = schema_name {
+                            channel
+                                .send_files(
+                                    ctx,
+                                    [AttachmentType::Path(Path::new(&format!(
+                                        "premade/{}",
+                                        scheme_file_name
+                                    )))],
+                                    |m| m.content("schema:"),
+                                )
+                                .await
+                                .unwrap();
+                        }
+                    }
+                    Err(why) => {
+                        ephemeral_interaction_edit(
+                            &ctx,
+                            &command,
+                            "Error loading premade dataset!",
+                            format!("Error loading data:\n```rust\n{why}\n```"),
+                            Some(false),
+                        )
+                        .await
+                        .unwrap();
+                    }
+                };
+            }
+            .in_current_span(),
+        );
         Ok(())
     }
 }

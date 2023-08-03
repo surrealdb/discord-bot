@@ -8,7 +8,6 @@ use crate::components::configurable_session::show;
 use crate::utils::*;
 
 use crate::config::Config;
-use crate::utils::interaction_reply;
 use crate::DB;
 
 pub async fn run(
@@ -21,13 +20,11 @@ pub async fn run(
                 DB.select(("guild_config", id.to_string())).await;
 
             let config = match result {
-                Ok(response) => {
-                    match response {
-                        Some(c) => {c}
-                        None => return interaction_reply_ephemeral(command, ctx, ":warning: No config found for this server, please ask an administrator to configure the bot".to_string()).await
-                    }
-                }
-                Err(e) => return interaction_reply_ephemeral(command, ctx, format!("Database error: {}", e)).await,
+                Ok(response) => match response {
+                    Some(c) => c,
+                    None => return CmdError::NoConfig.reply(&ctx, command).await,
+                },
+                Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
             };
 
             let message = command.data.resolved.messages.keys().next().unwrap();
@@ -40,19 +37,11 @@ pub async fn run(
             let db = create_db_instance(&config).await?;
 
             show(&ctx, &channel, crate::ConnType::Thread, &config).await?;
-            interaction_reply_ephemeral(command, ctx.clone(), format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL!", channel.id.as_u64())).await?;
-
+            ephemeral_interaction(&ctx, command, "Thread created!", format!(":information_source: You now have your own database instance! Head over to <#{}> to start writing SurrealQL!", channel.id.as_u64()), Some(true)).await?;
             register_db(ctx, db, channel, config, crate::ConnType::Thread, true).await?;
             Ok(())
         }
-        None => {
-            interaction_reply(
-                command,
-                ctx,
-                ":warning: Direct messages are not currently supported".to_string(),
-            )
-            .await
-        }
+        None => CmdError::NoGuild.reply(&ctx, command).await,
     }
 }
 

@@ -10,11 +10,12 @@ pub mod utils;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serenity::{
+    http::Http,
     model::{
         prelude::{component::ButtonStyle::Primary, AttachmentType, ChannelId},
         user::User,
     },
-    prelude::Context, http::Http,
+    prelude::Context,
 };
 use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
 use tokio::sync::Mutex;
@@ -57,7 +58,6 @@ pub enum ConnType {
 }
 
 impl Conn {
-    #[must_use]
     pub async fn export(&self, name: &str) -> Result<Option<PathBuf>, anyhow::Error> {
         let base_path = match std::env::var("TEMP_DIR_PATH") {
             Ok(p) => PathBuf::from(p),
@@ -110,7 +110,8 @@ impl Conn {
                                     .label("New Big Query please")
                                     .style(Primary)
                                     .emoji('📝')
-                            }).create_button(|b| {
+                            })
+                            .create_button(|b| {
                                 b.custom_id("configurable_session:copy_big_query")
                                     .label("Copy this Big Query")
                                     .style(Primary)
@@ -207,7 +208,7 @@ pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
             Ok(Some(path)) => {
                 channel.send_message(&http, |m| {
                     m.embed(|e| {
-                        e.title("Pre-shutdown DB Exported successfully").description("Find the exported .surql file below.\nYou can either use `/reconnect` and load a new session with it, or use it locally with `surreal import` CLI.").color(0x00ff00)
+                        e.title("Pre-shutdown DB Exported successfully").description("Sorry! The bot had to go offline for maintenance, your session has been exported. You can find the .surql file attached.\nYou can either use `/reconnect` and load a new session with it when the bot is back online, or use it locally with `surreal import` CLI.").color(0x00ff00)
                     }).add_file(&path)
                 }).await?;
                 tokio::fs::remove_file(path).await?;

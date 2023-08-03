@@ -6,22 +6,21 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::model::prelude::command::CommandOptionType;
 use serenity::prelude::*;
 
-use crate::utils::interaction_reply;
-use crate::utils::interaction_reply_ephemeral;
+use crate::utils::ephemeral_interaction;
+use crate::utils::CmdError;
 use crate::DBCONNS;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
     ctx: Context,
 ) -> Result<(), anyhow::Error> {
-    if let None = DBCONNS.lock().await.get(command.channel_id.as_u64()) {
-        interaction_reply_ephemeral(
-            command,
-            ctx,
-            ":information_source: Please use the `/share` command from an active SurrealQL channel",
-        )
-        .await?;
-        return Ok(());
+    if DBCONNS
+        .lock()
+        .await
+        .get(command.channel_id.as_u64())
+        .is_none()
+    {
+        return CmdError::NoSession.reply(&ctx, command).await;
     }
 
     let user_id = command.data.options[0]
@@ -46,19 +45,36 @@ pub async fn run(
                 ]))
             })
             .await?;
+        ephemeral_interaction(
+            &ctx,
+            command,
+            "Sharing channel",
+            "User added to channel",
+            Some(true),
+        )
+        .await?;
+    } else {
+        ephemeral_interaction(
+            &ctx,
+            command,
+            "Already public",
+            "Could not add user to channel as it's already a public thread.",
+            Some(false),
+        )
+        .await?;
     }
 
-    interaction_reply(
-        command,
-        ctx,
-        format!(
-            ":white_check_mark: <@{}> can now view this channel and write SurrealQL",
-            user_id
-        ),
-    )
-    .await?;
+    command
+        .channel_id
+        .say(
+            &ctx,
+            format!(
+                ":white_check_mark: <@{}> can now view this channel and write SurrealQL",
+                user_id
+            ),
+        )
+        .await?;
 
-    // interaction_reply(command, ctx.clone(), "not yet implemented".to_string()).await
     Ok(())
 }
 

@@ -47,7 +47,7 @@ async fn main() -> Result<(), anyhow::Error> {
         tokio::signal::ctrl_c()
             .await
             .expect("Could not register ctrl+c handler");
-        
+
         match surreal_bot::shutdown(&http).await {
             Ok(_) => info!("Surreal Bot DBCONNS exported successfully"),
             Err(e) => {

@@ -8,9 +8,9 @@ use crate::components::configurable_server::show;
 use crate::config;
 use crate::config::Config;
 use crate::config::ConfigBuilder;
-use crate::utils::interaction_reply;
+use crate::utils::ephemeral_interaction;
+use crate::utils::CmdError;
 use crate::DB;
-use crate::utils::interaction_reply_ephemeral;
 
 pub async fn run(
     command: &ApplicationCommandInteraction,
@@ -22,11 +22,11 @@ pub async fn run(
 
     let mut config: Config = match result {
         Ok(response) => match response {
-            Some(c) => {c}
+            Some(c) => c,
 
-            None => return interaction_reply(command, ctx.clone(), ":warning: This server is not yet configured, use `/configure` to add initial configuration".to_string()).await,
+            None => return CmdError::NoSession.reply(&ctx, command).await,
         },
-        Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
+        Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
     };
 
     debug!(config = ?config, "existing config");
@@ -45,18 +45,31 @@ pub async fn run(
         Ok(response) => match response {
             Some(c) => {
                 show(&ctx, &command.channel_id, &c).await?;
-                interaction_reply_ephemeral(command, ctx, ":white_check_mark: Configuration updated successfully".to_string()).await
+                ephemeral_interaction(
+                    &ctx,
+                    command,
+                    "Config updated",
+                    "Configuration updated successfully",
+                    Some(true),
+                )
+                .await
             }
 
             None => {
-                warn!("error updating configuration");
-                interaction_reply_ephemeral(command, ctx.clone(), ":x: Error updating configuration".to_string()).await
+                error!("Config update returned None");
+                ephemeral_interaction(
+                    &ctx,
+                    command,
+                    "Config not updated",
+                    "Error updating configuration",
+                    Some(false),
+                )
+                .await
             }
         },
         Err(e) => {
             error!(error = %e, "database error");
-            interaction_reply_ephemeral(command, ctx.clone(), format!(":x: Database error: {e}")).await
-            
+            CmdError::UpdateConfig(e).reply(&ctx, command).await
         }
     }
 }

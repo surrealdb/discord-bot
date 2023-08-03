@@ -5,11 +5,8 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
 use crate::components::configurable_server::show;
-use crate::config;
-use crate::config::Config;
-use crate::config::ConfigBuilder;
-use crate::utils::interaction_reply;
-use crate::utils::interaction_reply_ephemeral;
+use crate::config::{self, Config, ConfigBuilder};
+use crate::utils::{ephemeral_interaction, CmdError};
 use crate::DB;
 
 pub async fn run(
@@ -23,24 +20,17 @@ pub async fn run(
         .await;
 
     match result {
-        Ok(response) => match response {
-            Some(c) => return interaction_reply(command, ctx.clone(), format!(":warning: This server is already configured with: {:?}\n Try using `/config_update` to change the config", c)).await,
-
-            None => {}
-        },
-        Err(e) => return interaction_reply(command, ctx.clone(), format!("Database error: {}", e)).await,
+        Ok(response) => {
+            if response.is_some() {
+                return CmdError::ExpectedNoSession.reply(&ctx, command).await;
+            }
+        }
+        Err(e) => return CmdError::GetConfig(e).reply(&ctx, command).await,
     };
 
     let config = match Config::from_builder(ConfigBuilder::build(command)) {
         Some(c) => c,
-        None => {
-            return interaction_reply_ephemeral(
-                command,
-                ctx,
-                ":x: Error building config, please ensure all fields are present!",
-            )
-            .await;
-        }
+        None => return CmdError::BuildConfig.reply(&ctx, command).await,
     };
 
     debug!(config = ?config, "created config struct");
@@ -54,16 +44,30 @@ pub async fn run(
         Ok(response) => match response {
             Some(c) => {
                 show(&ctx, &command.channel_id, &c).await?;
-                interaction_reply_ephemeral(command, ctx, ":white_check_mark: Configuration added successfully".to_string()).await
+                ephemeral_interaction(
+                    &ctx,
+                    command,
+                    "Config added",
+                    "Configuration added successfully",
+                    Some(true),
+                )
+                .await
             }
             None => {
                 warn!("Error adding configuration");
-                interaction_reply_ephemeral(command, ctx.clone(), ":x: Error adding configuration".to_string()).await
+                ephemeral_interaction(
+                    &ctx,
+                    command,
+                    "Config not updated",
+                    "Error updating configuration",
+                    Some(false),
+                )
+                .await
             }
         },
         Err(e) => {
             error!(error = %e, "database error");
-            interaction_reply_ephemeral(command, ctx.clone(), format!(":x: Database error: {}", e)).await
+            CmdError::UpdateConfig(e).reply(&ctx, command).await
         }
     }
 }

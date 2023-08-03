@@ -7,7 +7,8 @@ use serenity::builder::CreateApplicationCommand;
 use serenity::prelude::*;
 
 use crate::utils::clean_channel;
-use crate::utils::interaction_reply_ephemeral;
+use crate::utils::ephemeral_interaction;
+use crate::utils::CmdError;
 use crate::DBCONNS;
 
 pub async fn run(
@@ -19,31 +20,24 @@ pub async fn run(
         .await
         .contains_key(command.channel_id.as_u64())
     {
-        interaction_reply_ephemeral(
-            command,
-            ctx,
-            ":warning: There is no database instance currently associated with this channel",
-        )
-        .await?;
+        CmdError::NoSession.reply(&ctx, command).await?;
         return Ok(());
     }
 
     let channel = match command.channel_id.to_channel(&ctx).await.unwrap() {
         Channel::Guild(c) => c,
         _ => {
-            interaction_reply_ephemeral(
-                command,
-                ctx,
-                ":warning: This command only works in guild channels",
-            )
-            .await?;
+            CmdError::NoGuild.reply(&ctx, command).await?;
             return Ok(());
         }
     };
-    interaction_reply_ephemeral(
+
+    ephemeral_interaction(
+        &ctx,
         command,
-        ctx.clone(),
-        ":white_check_mark: This channel should now be cleaned",
+        "Cleaned channel",
+        "This channel should now be cleaned",
+        Some(true),
     )
     .await?;
 
