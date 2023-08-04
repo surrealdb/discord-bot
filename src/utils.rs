@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp::Ordering};
+use std::{borrow::Cow, cmp::Ordering, sync::Arc};
 
 use once_cell::sync::Lazy;
 use serenity::{
@@ -52,6 +52,8 @@ pub enum CmdError {
     ExportTooLarge,
     BadQuery(surrealdb::Error),
     AttachmentDownload(anyhow::Error),
+    CreateDB(anyhow::Error),
+    RegisterDB(anyhow::Error),
 }
 
 impl CmdError {
@@ -136,6 +138,14 @@ impl CmdError {
                 "Attachment download failed".into(),
                 format!("There was an error while loading the attachment:\n```rust\n{e}\n```").into(),
             ),
+            CmdError::CreateDB(e) => (
+                "Database creation failed".into(),
+                format!("There was an error while creating the database:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::RegisterDB(e) => (
+                "Database registration failed".into(),
+                format!("There was an error while registering the database:\n```rust\n{e}\n```").into(),
+            )
         }
     }
 
@@ -159,11 +169,17 @@ impl CmdError {
 }
 
 /// ToInteraction is a trait that allows for easy conversion of different interaction types to a tuple of the interaction id and token.
-pub trait ToInteraction {
+pub trait ToInteraction: std::marker::Copy {
     fn to_interaction(&self) -> (&InteractionId, &str);
 }
 
 impl ToInteraction for &ApplicationCommandInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
+}
+
+impl ToInteraction for &Arc<ApplicationCommandInteraction> {
     fn to_interaction(&self) -> (&InteractionId, &str) {
         (&self.id, &self.token)
     }
@@ -429,20 +445,21 @@ pub async fn register_db(
     config: Config,
     conn_type: ConnType,
     require_query: bool,
-) -> Result<(), anyhow::Error> {
+) -> Result<Conn, anyhow::Error> {
     info!("Registering a new database");
-    DBCONNS.lock().await.insert(
-        *channel.id.as_u64(),
-        crate::Conn {
-            db,
-            last_used: Instant::now(),
-            conn_type,
-            ttl: config.ttl,
-            pretty: config.pretty,
-            json: config.json,
-            require_query,
-        },
-    );
+    let conn = crate::Conn {
+        db,
+        last_used: Instant::now(),
+        conn_type,
+        ttl: config.ttl,
+        pretty: config.pretty,
+        json: config.json,
+        require_query,
+    };
+    DBCONNS
+        .lock()
+        .await
+        .insert(*channel.id.as_u64(), conn.clone());
 
     tokio::spawn(
         async move {
@@ -467,7 +484,7 @@ pub async fn register_db(
         }
         .in_current_span(),
     );
-    Ok(())
+    Ok(conn)
 }
 
 pub async fn respond(
