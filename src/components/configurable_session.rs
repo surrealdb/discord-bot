@@ -6,7 +6,7 @@ use crate::{
         clean_channel, ephemeral_interaction, user_interaction, CmdError, BOT_VERSION,
         SURREALDB_VERSION,
     },
-    ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DBCONNS,
+    ConnType, BIG_QUERY_SENT_KEY, BIG_QUERY_VARS_KEY, DB, DBCONNS,
 };
 
 use anyhow::Result;
@@ -257,7 +257,46 @@ pub async fn handle_component(
                 .await?;
         }
         ("reconnect", false) => {
-            // TODO: feature creep but maybe a button to re-create a session after it's been deleted
+            let result: Result<Option<Config>, surrealdb::Error> = DB
+                .select((
+                    "guild_config",
+                    &event.guild_id.unwrap_or_default().to_string(),
+                ))
+                .await;
+            match (event.message.attachments.first(), result) {
+                (Some(att), Ok(Some(config))) => {
+                    ephemeral_interaction(
+                        &ctx,
+                        event,
+                        "Creating new DB",
+                        "Your new DB is being created, this may take a while.",
+                        None,
+                    )
+                    .await?;
+                    tokio::spawn(
+                        crate::commands::reconnect::new_db_from_attachment(
+                            ctx.clone(),
+                            Arc::new(event.clone()),
+                            channel.clone(),
+                            config,
+                            att.clone(),
+                        )
+                        .in_current_span(),
+                    );
+                }
+                (Some(_), Err(err)) => {
+                    CmdError::GetConfig(err).reply(ctx, event).await?;
+                }
+                (Some(_), Ok(None)) => {
+                    CmdError::NoConfig.reply(ctx, event).await?;
+                }
+                (None, _) => {
+                    CmdError::ExpectedAttachment.reply(ctx, event).await?;
+                }
+            }
+        }
+        ("reconnect", true) => {
+            CmdError::ExpectedNoSession.reply(&ctx, event).await?;
         }
         ("rename_thread", _) => {
             let channel_name = channel

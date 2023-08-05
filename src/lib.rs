@@ -63,13 +63,13 @@ pub enum ConnType {
 impl Conn {
     pub async fn import_from_attachment(
         &self,
-        ctx: &Context,
+        http: impl AsRef<Http>,
         i: impl ToInteraction,
         attachment: &Attachment,
     ) -> Result<(), anyhow::Error> {
         ephemeral_interaction_edit(
-            ctx,
-            i,
+            &http,
+            i.clone(),
             "Downloading attachment",
             format!("Now downloading `{}`, please wait.", attachment.filename),
             None,
@@ -77,25 +77,25 @@ impl Conn {
         .await?;
         match attachment.download().await {
             Ok(bytes) => {
-                ephemeral_interaction_edit(ctx, i, "Downloaded, now importing...", "Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_", None).await?;
+                ephemeral_interaction_edit(&http, i.clone(), "Downloaded, now importing...", "Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_", None).await?;
                 match self
                     .db
                     .query(String::from_utf8_lossy(&bytes).into_owned())
                     .await
                 {
                     Ok(_) => {
-                        ephemeral_interaction_edit(ctx, i, "Imported successfully!", "Your data has been imported successfully!\nYou can now query your dataset.", Some(true)).await?;
+                        ephemeral_interaction_edit(http, i, "Imported successfully!", "Your data has been imported successfully!\nYou can now query your dataset.", Some(true)).await?;
                         Ok(())
                     }
                     Err(why) => {
-                        CmdError::BadQuery(why).edit(ctx, i).await?;
+                        CmdError::BadQuery(why).edit(http, i).await?;
                         Ok(())
                     }
                 }
             }
             Err(err) => {
                 CmdError::AttachmentDownload(err.into())
-                    .edit(ctx, i)
+                    .edit(http, i)
                     .await?;
                 Ok(())
             }
@@ -299,7 +299,7 @@ pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
                 let res = channel.send_message(&http, |m| {
                     m.embed(|e| {
                         e.title("Pre-shutdown DB Exported successfully").description("Sorry! The bot had to go offline for maintenance, your session has been exported. You can find the .surql file attached.\nYou can either use `/reconnect` and load a new session with it when the bot is back online, or use it locally with `surreal import` CLI.").color(0x00ff00)
-                    }).add_file(attchment)
+                    }).add_file(attchment).components(|c| c.create_action_row(|r| r.create_button(|b| b.label("Reconnect").custom_id("configurable_session:reconnect").style(Primary).emoji('📦'))))
                 }).await;
                 if let Err(why) = res {
                     errors.push(why.to_string())

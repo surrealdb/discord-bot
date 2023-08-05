@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use serenity::{
-    builder::CreateApplicationCommand, futures::StreamExt, model::prelude::application_command,
+    builder::CreateApplicationCommand,
+    futures::StreamExt,
+    model::prelude::{application_command, Attachment, ChannelId},
     prelude::Context,
 };
 use tracing::Instrument;
@@ -11,7 +14,7 @@ use crate::{
     config::Config,
     utils::{
         create_db_instance, ephemeral_interaction, ephemeral_interaction_edit, register_db,
-        CmdError,
+        CmdError, ToInteraction,
     },
     DB, DBCONNS,
 };
@@ -44,71 +47,124 @@ pub async fn run(
                     None,
                 )
                 .await?;
-
-                let command = Arc::new(command.clone());
-                let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
-                tokio::spawn(async move {
-                    let mut messages = command.channel_id.messages_iter(&ctx).boxed();
-                    let mut total = 0;
-                    let att = loop {
-                        total += 1;
-                        if total > 20 {
-                            break None;
-                        }
-                        if let Some(message_result) = messages.next().await {
-                            match message_result {
-                                Ok(message) => match message.attachments.first() {
-                                    Some(att) => break Some(att.clone()),
-                                    None => continue,
-                                },
-                                Err(error) => {
-                                    error!(error = %error, "Error getting message");
-                                    ephemeral_interaction_edit(&ctx, &command, "Failed to get message", format!("Couldn't load a message:\n```rust\n{error}\n```"), Some(false)).await.unwrap();
-                                    break None;
-                                }
-                            }
-                        } else {
-                            break None;
-                        }
-                    };
-                    if let Some(att) = att {
-                        match create_db_instance(&config).await {
-                            Ok(db) => {
-                                match register_db(
-                                    ctx.clone(),
-                                    db.clone(),
-                                    channel.clone(),
-                                    config.clone(),
-                                    crate::ConnType::ConnectedChannel,
-                                    true,
-                                )
-                                .await {
-                                    Ok(conn) => {
-                                        ephemeral_interaction_edit(&ctx, &command, "Session loading!", "Bot has successfully created a new session, registered it with this channel and is now loading your export.", None).await.unwrap();
-                                        if let Err(err) = conn.import_from_attachment(&ctx, &command, &att).await {
-                                            error!(error = %err, "Error importing from attachment")
-                                        }
-                                        show(&ctx, &channel, conn.conn_type, &config).await.unwrap();
-                                    },
-                                    Err(e) => {
-                                        CmdError::RegisterDB(e).edit(&ctx, &command).await.unwrap();
-                                    }
-                                }
-                            },
-                            Err(err) => {
-                                error!(error = %err, "Error creating DB instance");
-                                CmdError::CreateDB(err).edit(&ctx, &command).await.unwrap();
-                            },
-                        }
-                    } else {
-                        ephemeral_interaction_edit(&ctx, &command, "No export found!", "Bot could not find any .surql attachments in the last 20 messages.", Some(false)).await.unwrap();
-                    }
-                }.in_current_span());
-
+                tokio::spawn(
+                    reconnect(
+                        ctx,
+                        Arc::new(command.clone()),
+                        command.channel_id,
+                        config,
+                        20,
+                    )
+                    .in_current_span(),
+                );
                 Ok(())
             }
         }
         None => CmdError::NoGuild.reply(&ctx, command).await,
+    }
+}
+
+async fn reconnect(
+    ctx: Context,
+    i: impl ToInteraction,
+    channel_id: ChannelId,
+    config: Config,
+    limit: usize,
+) -> Result<(), anyhow::Error> {
+    match find_attachment(&ctx, &i, channel_id, limit).await {
+        Some(att) => new_db_from_attachment(ctx.clone(), i, channel_id, config, att).await,
+        None => {
+            ephemeral_interaction_edit(
+                &ctx,
+                i,
+                "No export found!",
+                "Bot could not find any .surql attachments in the last 20 messages.",
+                Some(false),
+            )
+            .await
+        }
+    }
+}
+
+pub async fn new_db_from_attachment(
+    ctx: Context,
+    i: impl ToInteraction,
+    channel_id: ChannelId,
+    config: Config,
+    att: Attachment,
+) -> Result<(), anyhow::Error> {
+    let channel = channel_id
+        .to_channel(&ctx)
+        .await?
+        .guild()
+        .ok_or(anyhow!("Not in a guild"))?;
+
+    match create_db_instance(&config).await {
+        Ok(db) => {
+            match register_db(
+                ctx.clone(),
+                db.clone(),
+                channel.clone(),
+                config.clone(),
+                crate::ConnType::ConnectedChannel,
+                true,
+            )
+            .await
+            {
+                Ok(conn) => {
+                    ephemeral_interaction_edit(&ctx, i.clone(), "Session loading!", "Successfully created a new session, registered it with this channel and now loading your export.", None).await?;
+                    if let Err(err) = conn.import_from_attachment(&ctx, i.clone(), &att).await {
+                        error!(error = %err, "Error importing from attachment")
+                    }
+                    show(&ctx, &channel, conn.conn_type, &config).await
+                }
+                Err(e) => CmdError::RegisterDB(e).edit(&ctx, i).await,
+            }
+        }
+        Err(err) => {
+            error!(error = %err, "Error creating DB instance");
+            CmdError::CreateDB(err).edit(&ctx, i).await
+        }
+    }
+}
+
+#[tracing::instrument(skip(ctx, i), fields(channel_id = %channel_id, limit = %limit))]
+async fn find_attachment(
+    ctx: &Context,
+    i: &impl ToInteraction,
+    channel_id: ChannelId,
+    limit: usize,
+) -> Option<Attachment> {
+    let mut messages = channel_id.messages_iter(ctx).boxed();
+    let mut total = 0;
+    loop {
+        total += 1;
+        if total > limit {
+            break None;
+        }
+        if let Some(message_result) = messages.next().await {
+            match message_result {
+                Ok(message) => match message.attachments.first() {
+                    Some(att) => break Some(att.clone()),
+                    None => continue,
+                },
+                Err(error) => {
+                    error!(error = %error, "Error getting message");
+                    ephemeral_interaction_edit(
+                        ctx,
+                        i.clone(),
+                        "Failed to get message",
+                        format!("Couldn't load a message:\n```rust\n{error}\n```"),
+                        Some(false),
+                    )
+                    .await
+                    .unwrap();
+                    break None;
+                }
+            }
+        } else {
+            break None;
+        }
     }
 }
 
