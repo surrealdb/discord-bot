@@ -15,7 +15,7 @@ use serenity::{
     model::{
         prelude::{
             application_command::ApplicationCommandInteraction, component::ButtonStyle::Primary,
-            AttachmentType, ChannelId,
+            Attachment, AttachmentType, ChannelId,
         },
         user::User,
     },
@@ -24,7 +24,7 @@ use serenity::{
 use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
-use utils::MAX_FILE_SIZE;
+use utils::{ephemeral_interaction_edit, CmdError, ToInteraction, MAX_FILE_SIZE};
 
 #[macro_use]
 extern crate tracing;
@@ -61,6 +61,47 @@ pub enum ConnType {
 }
 
 impl Conn {
+    pub async fn import_from_attachment(
+        &self,
+        http: impl AsRef<Http>,
+        i: impl ToInteraction,
+        attachment: &Attachment,
+    ) -> Result<(), anyhow::Error> {
+        ephemeral_interaction_edit(
+            &http,
+            i.clone(),
+            "Downloading attachment",
+            format!("Now downloading `{}`, please wait.", attachment.filename),
+            None,
+        )
+        .await?;
+        match attachment.download().await {
+            Ok(bytes) => {
+                ephemeral_interaction_edit(&http, i.clone(), "Downloaded, now importing...", "Your data is currently being loaded, soon you'll be able to query your dataset! \n_Please wait for a confirmation that the dataset is loaded!_", None).await?;
+                match self
+                    .db
+                    .query(String::from_utf8_lossy(&bytes).into_owned())
+                    .await
+                {
+                    Ok(_) => {
+                        ephemeral_interaction_edit(http, i, "Imported successfully!", "Your data has been imported successfully!\nYou can now query your dataset.", Some(true)).await?;
+                        Ok(())
+                    }
+                    Err(why) => {
+                        CmdError::BadQuery(why).edit(http, i).await?;
+                        Ok(())
+                    }
+                }
+            }
+            Err(err) => {
+                CmdError::AttachmentDownload(err.into())
+                    .edit(http, i)
+                    .await?;
+                Ok(())
+            }
+        }
+    }
+
     #[must_use]
     pub async fn export_to_attachment(&self) -> Result<Option<AttachmentType>, anyhow::Error> {
         let mut acc = Vec::new();
@@ -77,7 +118,7 @@ impl Conn {
 
         let reply_attachment = AttachmentType::Bytes {
             data: std::borrow::Cow::Owned(acc),
-            filename: format!("export.surql"),
+            filename: "export.surql".to_string(),
         };
         Ok(Some(reply_attachment))
     }
@@ -258,7 +299,7 @@ pub async fn shutdown(http: impl AsRef<Http>) -> Result<(), anyhow::Error> {
                 let res = channel.send_message(&http, |m| {
                     m.embed(|e| {
                         e.title("Pre-shutdown DB Exported successfully").description("Sorry! The bot had to go offline for maintenance, your session has been exported. You can find the .surql file attached.\nYou can either use `/reconnect` and load a new session with it when the bot is back online, or use it locally with `surreal import` CLI.").color(0x00ff00)
-                    }).add_file(attchment)
+                    }).add_file(attchment).components(|c| c.create_action_row(|r| r.create_button(|b| b.label("Reconnect").custom_id("configurable_session:reconnect").style(Primary).emoji('📦'))))
                 }).await;
                 if let Err(why) = res {
                     errors.push(why.to_string())

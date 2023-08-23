@@ -102,6 +102,7 @@ impl EventHandler for Handler {
                         }
                         "query" => commands::query::run(&command, ctx.clone()).await,
                         "q" => commands::q::run(&command, ctx.clone()).await,
+                        "reconnect" => commands::reconnect::run(&command, ctx.clone()).await,
                         "connect" => commands::connect::run(&command, ctx.clone()).await,
                         "export" => commands::export::run(&command, ctx.clone()).await,
                         _ => {

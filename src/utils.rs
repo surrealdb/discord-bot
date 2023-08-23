@@ -1,8 +1,7 @@
-use std::{borrow::Cow, cmp::Ordering};
-
 use once_cell::sync::Lazy;
 use serenity::{
     builder::{CreateInteractionResponse, EditInteractionResponse},
+    http::Http,
     json::{self, Value},
     model::{
         prelude::{
@@ -10,6 +9,7 @@ use serenity::{
                 ApplicationCommandInteraction, CommandDataOption, CommandDataOptionValue,
             },
             command::CommandOptionType,
+            component::ButtonStyle::Primary,
             message_component::MessageComponentInteraction,
             modal::ModalSubmitInteraction,
             AttachmentType, ChannelId, GuildChannel, InteractionId, Message, PermissionOverwrite,
@@ -20,6 +20,7 @@ use serenity::{
     },
     prelude::Context,
 };
+use std::{borrow::Cow, cmp::Ordering, sync::Arc};
 use surrealdb::{
     engine::local::{Db, Mem},
     opt::auth::Root,
@@ -52,6 +53,9 @@ pub enum CmdError {
     ExportTooLarge,
     BadQuery(surrealdb::Error),
     AttachmentDownload(anyhow::Error),
+    ExpectedAttachment,
+    CreateDB(anyhow::Error),
+    RegisterDB(anyhow::Error),
 }
 
 impl CmdError {
@@ -136,30 +140,41 @@ impl CmdError {
                 "Attachment download failed".into(),
                 format!("There was an error while loading the attachment:\n```rust\n{e}\n```").into(),
             ),
+            CmdError::ExpectedAttachment => {
+                ("Attachment missing".into(), "Message should've had an attachment, but didn't.".into())
+            }
+            CmdError::CreateDB(e) => (
+                "Database creation failed".into(),
+                format!("There was an error while creating the database:\n```rust\n{e}\n```").into(),
+            ),
+            CmdError::RegisterDB(e) => (
+                "Database registration failed".into(),
+                format!("There was an error while registering the database:\n```rust\n{e}\n```").into(),
+            )
         }
     }
 
     pub async fn reply(
         &self,
-        ctx: &Context,
+        http: impl AsRef<Http>,
         interaction: impl ToInteraction,
     ) -> Result<(), anyhow::Error> {
         let (title, description) = self.message();
-        ephemeral_interaction(ctx, interaction, title, description, Some(false)).await
+        ephemeral_interaction(http, interaction, title, description, Some(false)).await
     }
 
     pub async fn edit(
         &self,
-        ctx: &Context,
+        http: impl AsRef<Http>,
         interaction: impl ToInteraction,
     ) -> Result<(), anyhow::Error> {
         let (title, description) = self.message();
-        ephemeral_interaction_edit(ctx, interaction, title, description, Some(false)).await
+        ephemeral_interaction_edit(http, interaction, title, description, Some(false)).await
     }
 }
 
 /// ToInteraction is a trait that allows for easy conversion of different interaction types to a tuple of the interaction id and token.
-pub trait ToInteraction {
+pub trait ToInteraction: Clone {
     fn to_interaction(&self) -> (&InteractionId, &str);
 }
 
@@ -169,7 +184,19 @@ impl ToInteraction for &ApplicationCommandInteraction {
     }
 }
 
+impl ToInteraction for Arc<ApplicationCommandInteraction> {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
+}
+
 impl ToInteraction for &MessageComponentInteraction {
+    fn to_interaction(&self) -> (&InteractionId, &str) {
+        (&self.id, &self.token)
+    }
+}
+
+impl ToInteraction for Arc<MessageComponentInteraction> {
     fn to_interaction(&self) -> (&InteractionId, &str) {
         (&self.id, &self.token)
     }
@@ -188,7 +215,7 @@ impl ToInteraction for (&InteractionId, &str) {
 }
 
 pub async fn ephemeral_interaction_edit(
-    ctx: &Context,
+    http: impl AsRef<Http>,
     interaction: impl ToInteraction,
     title: impl ToString,
     description: impl ToString,
@@ -209,7 +236,7 @@ pub async fn ephemeral_interaction_edit(
 
     let map = json::hashmap_to_json_map(interaction_response.0);
     let (_, token) = interaction.to_interaction();
-    ctx.http
+    http.as_ref()
         .edit_original_interaction_response(token, &Value::from(map))
         .await?;
     Ok(())
@@ -217,7 +244,7 @@ pub async fn ephemeral_interaction_edit(
 
 /// Interaction-source independent function to create an ephemeral interaction message.
 pub async fn ephemeral_interaction(
-    ctx: &Context,
+    http: impl AsRef<Http>,
     interaction: impl ToInteraction,
     title: impl ToString,
     description: impl ToString,
@@ -241,7 +268,7 @@ pub async fn ephemeral_interaction(
 
     let map = json::hashmap_to_json_map(interaction_response.0);
     let (iid, token) = interaction.to_interaction();
-    ctx.http
+    http.as_ref()
         .create_interaction_response(iid.0, token, &Value::from(map))
         .await?;
     Ok(())
@@ -249,7 +276,7 @@ pub async fn ephemeral_interaction(
 
 /// Interaction-source independent function to create a logged interaction message for a specific user.
 pub async fn user_interaction(
-    ctx: &Context,
+    http: impl AsRef<Http>,
     interaction: impl ToInteraction,
     user: &User,
     title: impl ToString,
@@ -276,7 +303,7 @@ pub async fn user_interaction(
 
     let map = json::hashmap_to_json_map(interaction_response.0);
     let (iid, token) = interaction.to_interaction();
-    ctx.http
+    http.as_ref()
         .create_interaction_response(iid.0, token, &Value::from(map))
         .await?;
     Ok(())
@@ -284,15 +311,15 @@ pub async fn user_interaction(
 
 /// Interaction-source independent function to create a logged interaction message for system with optional mentions.
 pub async fn system_message<'a>(
-    ctx: &Context,
+    http: impl AsRef<Http>,
     channel: &ChannelId,
     title: impl ToString,
     description: impl ToString,
     success: Option<bool>,
     mentions: Option<String>,
-    file: Option<AttachmentType<'_>>,
+    export: Option<AttachmentType<'_>>,
 ) -> Result<(), anyhow::Error> {
-    channel.send_message(&ctx, |m| {
+    channel.send_message(http.as_ref(), |m| {
         let m = m.embed(|e| {
             let e = e.title(title.to_string())
                 .description(description.to_string())
@@ -310,8 +337,8 @@ pub async fn system_message<'a>(
         } else {
             m
         };
-        if let Some(path) = file {
-            m.add_file(path)
+        if let Some(path) = export {
+            m.add_file(path).components(|c| c.create_action_row(|r| r.create_button(|b| b.label("Reconnect").custom_id("configurable_session:reconnect").style(Primary).emoji('📦'))))
         } else {
             m
         }
@@ -330,13 +357,13 @@ pub fn read_view_perms(kind: PermissionOverwriteType) -> PermissionOverwrite {
 }
 
 #[instrument(skip_all, fields(guild_id = channel.guild_id.as_u64(), channel_id = channel.id.as_u64(), channel_name = channel.name.clone()))]
-pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
+pub async fn clean_channel(mut channel: GuildChannel, http: impl AsRef<Http>) {
     info!("Cleaning up channel");
     let entry = DBCONNS.lock().await.remove(channel.id.as_u64());
 
     if let Some(conn) = entry {
         match system_message(
-            ctx,
+            &http,
             &channel.id,
             "Session expired or terminated",
             "This database instance has expired or was terminated and is no longer functional.",
@@ -353,7 +380,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
         match conn.export_to_attachment().await {
             Ok(Some(attachment)) => {
                 match system_message(
-                    ctx,
+                    &http,
                     &channel.id,
                     "Cleanup DB Exported successfully",
                     "You can find your exported DB attached.",
@@ -369,7 +396,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             }
             Ok(None) => {
                 warn!("Export was too big");
-                match system_message(ctx, &channel.id, "Can't upload DB", "Your database is too powerful, it is now gone. (the export was too large to send)", Some(true), None, None).await {
+                match system_message(&http, &channel.id, "Can't upload DB", "Your database is too powerful, it is now gone. (the export was too large to send)", Some(true), None, None).await {
                     Ok(_) => {}
                     Err(e) => error!("Failed to send system message: {}", e),
                 }
@@ -377,7 +404,7 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
             Err(err) => {
                 error!(error = %err, "Failed to export session");
                 match system_message(
-                    ctx,
+                    &http,
                     &channel.id,
                     "Failed to export",
                     format!("Database export failed:\n```rust\n{err}\n```"),
@@ -408,13 +435,13 @@ pub async fn clean_channel(mut channel: GuildChannel, ctx: &Context) {
 
     if Some(config.active_channel) == channel.parent_id {
         channel
-            .edit(ctx, |c| c.category(config.archive_channel))
+            .edit(http.as_ref(), |c| c.category(config.archive_channel))
             .await
             .ok();
     }
 
     channel
-        .edit_thread(ctx, |thread| {
+        .edit_thread(http, |thread| {
             thread.archived(true).auto_archive_duration(60)
         })
         .await
@@ -429,20 +456,21 @@ pub async fn register_db(
     config: Config,
     conn_type: ConnType,
     require_query: bool,
-) -> Result<(), anyhow::Error> {
+) -> Result<Conn, anyhow::Error> {
     info!("Registering a new database");
-    DBCONNS.lock().await.insert(
-        *channel.id.as_u64(),
-        crate::Conn {
-            db,
-            last_used: Instant::now(),
-            conn_type,
-            ttl: config.ttl,
-            pretty: config.pretty,
-            json: config.json,
-            require_query,
-        },
-    );
+    let conn = crate::Conn {
+        db,
+        last_used: Instant::now(),
+        conn_type,
+        ttl: config.ttl,
+        pretty: config.pretty,
+        json: config.json,
+        require_query,
+    };
+    DBCONNS
+        .lock()
+        .await
+        .insert(*channel.id.as_u64(), conn.clone());
 
     tokio::spawn(
         async move {
@@ -459,7 +487,7 @@ pub async fn register_db(
                     }
                 }
                 if last_time.elapsed() >= ttl {
-                    clean_channel(channel, &ctx).await;
+                    clean_channel(channel, ctx.clone()).await;
                     break;
                 }
                 sleep_until(last_time + ttl).await;
@@ -467,7 +495,7 @@ pub async fn register_db(
         }
         .in_current_span(),
     );
-    Ok(())
+    Ok(conn)
 }
 
 pub async fn respond(

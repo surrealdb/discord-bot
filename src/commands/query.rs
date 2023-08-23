@@ -33,7 +33,7 @@ pub async fn run(
             conn.query(
                 &ctx,
                 &command.channel_id,
-                Some(&command),
+                Some(command),
                 &command.user,
                 query,
                 None,
