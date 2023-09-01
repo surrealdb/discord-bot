@@ -1,6 +1,6 @@
 [package]
 name = "surreal_bot"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 authors = [
     "Raphael Darley <raphael.darley@surrealdb.com>",
@@ -23,10 +23,7 @@ serenity = { default-features = false, features = [
     "model",
     "rustls_backend",
 ], version = "0.11.6" }
-surrealdb = { git = "https://github.com/raphaeldarley/surrealdb.git", branch = "allow-export-to-buffer", features = [
-    "kv-mem",
-    "kv-rocksdb",
-] }
+surrealdb = { version = "1.0.0-beta.10", features = ["kv-mem", "kv-rocksdb"] }
 tokio = { version = "1.29.1", features = [
     "macros",
     "signal",
@@ -35,3 +32,4 @@ tokio = { version = "1.29.1", features = [
 tracing = "0.1"
 tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures = "0.3.28"
