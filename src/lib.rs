@@ -7,6 +7,7 @@ pub mod handler;
 pub mod premade;
 pub mod utils;
 
+use futures::StreamExt;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 use serenity::{
@@ -37,7 +38,7 @@ use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
 pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-pub static DB: Surreal<Db> = Surreal::init();
+pub static DB: Lazy<Surreal<Db>> = Lazy::new(Surreal::init);
 
 pub const BIG_QUERY_SENT_KEY: &str = "Query sent";
 pub const BIG_QUERY_VARS_KEY: &str = "Variables sent";
@@ -105,15 +106,10 @@ impl Conn {
     #[must_use]
     pub async fn export_to_attachment(&self) -> Result<Option<AttachmentType>, anyhow::Error> {
         let mut acc = Vec::new();
-        let (s, r) = async_channel::unbounded();
-        self.db.export(s).await?;
 
-        while let Ok(v) = r.recv().await {
-            acc.extend_from_slice(&v);
-
-            if acc.len() > utils::MAX_FILE_SIZE {
-                return Ok(None);
-            }
+        let mut export_stream = self.db.export(()).await?;
+        while let Some(v) = export_stream.next().await {
+            acc.extend(v?);
         }
 
         let reply_attachment = AttachmentType::Bytes {
