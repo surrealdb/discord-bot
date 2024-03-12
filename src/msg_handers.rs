@@ -4,6 +4,7 @@ use std::time::Duration;
 use chrono::DateTime;
 use chrono::Datelike;
 use chrono::TimeDelta;
+use chrono::Timelike;
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use serenity::model::channel::Message;
@@ -65,11 +66,26 @@ pub async fn oof_msg_handler(ctx: &Context, msg: &Message) {
     oofmsgs.insert(msg.channel_id.as_u64().to_owned(), now);
     drop(oofmsgs);
 
+    let weekend_msg = "weekend message";
+    let fri_after = "friday after hours message";
+    let week_after = "weekday after hours message";
+    let week_before = "weekday before hours message";
+
+    let hour = now.hour();
+
     use chrono::Weekday::*;
     let reply = match weekday {
-        Sat | Sun => "It's a weekend!!! We might not be able to get back until Monday.",
-        Fri => "Friday!!! We might not be able to get back until monday",
-        _ => "It's not working hours, we'll try to get back tomorrow!",
+        Sat | Sun => weekend_msg,
+        Fri => match hour {
+            0..=8 => week_before,
+            5..=24 => fri_after,
+            _ => return,
+        },
+        _ => match hour {
+            0..=8 => week_before,
+            5..=24 => week_after,
+            _ => return,
+        },
     }
     .to_string();
 
