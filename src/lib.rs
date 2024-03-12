@@ -4,6 +4,7 @@ pub mod components;
 pub mod config;
 pub mod db_utils;
 pub mod handler;
+pub mod msg_handers;
 pub mod premade;
 pub mod utils;
 

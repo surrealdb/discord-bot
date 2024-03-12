@@ -4,15 +4,15 @@ use serenity::model::channel::Message;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use tokio::time::Instant;
 use tracing::Instrument;
 use tracing::Level;
 
 use crate::commands;
-use crate::process;
+use crate::msg_handers::db_msg_handler;
+use crate::msg_handers::oof_msg_handler;
 use crate::utils::ephemeral_interaction;
-use crate::utils::respond;
-use crate::DBCONNS;
+
+pub struct Handler;
 
 fn validate_msg(msg: &Message) -> bool {
     if msg.author.bot {
@@ -21,41 +21,15 @@ fn validate_msg(msg: &Message) -> bool {
     true
 }
 
-pub struct Handler;
-
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        match msg.content.chars().next() {
-            Some('#') => return,
-            Some('/') => return,
-            Some('-') => return,
-            None => return,
-            _ => {}
+        if !validate_msg(&msg) {
+            return;
         }
-
-        let conn = match DBCONNS.lock().await.get_mut(msg.channel_id.as_u64()) {
-            Some(c) => {
-                c.last_used = Instant::now();
-                if c.require_query {
-                    return;
-                }
-                c.clone()
-            }
-            None => {
-                return;
-            }
-        };
-        if validate_msg(&msg) {
-            let result = conn.db.query(&msg.content).await;
-            let reply = match process(conn.pretty, conn.json, result) {
-                Ok(r) => r,
-                Err(e) => e.to_string(),
-            };
-
-            respond(reply, ctx, msg.clone(), &conn, msg.channel_id)
-                .await
-                .unwrap();
+        let db_replied = db_msg_handler(&ctx, &msg).await;
+        if !db_replied {
+            oof_msg_handler(&ctx, &msg).await
         }
     }
 
