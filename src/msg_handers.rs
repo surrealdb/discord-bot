@@ -78,12 +78,12 @@ pub async fn oof_msg_handler(ctx: &Context, msg: &Message) {
         Sat | Sun => weekend_msg,
         Fri => match hour {
             0..=8 => week_before,
-            5..=24 => fri_after,
+            17..=24 => fri_after,
             _ => return,
         },
         _ => match hour {
             0..=8 => week_before,
-            5..=24 => week_after,
+            17..=24 => week_after,
             _ => return,
         },
     }
