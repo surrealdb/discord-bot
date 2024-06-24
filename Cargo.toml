@@ -1,6 +1,6 @@
 [package]
 name = "surreal_bot"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = [
     "Raphael Darley <raphael.darley@surrealdb.com>",
@@ -23,7 +23,7 @@ serenity = { default-features = false, features = [
     "model",
     "rustls_backend",
 ], version = "0.11.6" }
-surrealdb = { version = "1.1", features = ["kv-mem", "kv-rocksdb"] }
+surrealdb = { version = "1.5.3", features = ["kv-mem", "kv-rocksdb"] }
 tokio = { version = "1.29.1", features = [
     "macros",
     "signal",

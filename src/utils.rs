@@ -23,7 +23,6 @@ use serenity::{
 use std::{borrow::Cow, cmp::Ordering, sync::Arc};
 use surrealdb::{
     engine::local::{Db, Mem},
-    opt::auth::Root,
     Surreal,
 };
 use tokio::time::{sleep_until, Instant};
