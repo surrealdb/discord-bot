@@ -4,6 +4,7 @@ use serenity::prelude::*;
 use dotenv::dotenv;
 use std::env;
 use std::path::Path;
+use surreal_bot::config::Config;
 use tracing::{error, info};
 
 use surrealdb::engine::local::{Mem, RocksDb};
@@ -23,10 +24,22 @@ async fn main() -> Result<(), anyhow::Error> {
         .init();
 
     match env::var("CONFIG_DB_PATH") {
-        Ok(path) => {
-            let path = Path::new(&path);
-            DB.connect::<RocksDb>(path).await?;
-        }
+        Ok(path) => match path.to_lowercase().as_str() {
+            "default" => {
+                DB.connect::<Mem>(()).await?;
+                let config = Config::surrealdb_default();
+                let _: Option<Config> = DB
+                    .create(("guild_config", config.guild_id.to_string()))
+                    .content(config)
+                    .await
+                    .ok()
+                    .flatten();
+            }
+            _ => {
+                let path = Path::new(&path);
+                DB.connect::<RocksDb>(path).await?;
+            }
+        },
         Err(_) => {
             DB.connect::<Mem>(()).await?;
         }

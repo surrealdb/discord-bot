@@ -53,6 +53,18 @@ impl Config {
             json: builder.json?,
         })
     }
+
+    pub fn surrealdb_default() -> Config {
+        Config {
+            guild_id: GuildId(902568124350599239),
+            active_channel: ChannelId(1134233558785990706),
+            archive_channel: ChannelId(1175018599887421460),
+            ttl: Duration::from_secs(60 * 60 * 6),
+            timeout: Duration::from_secs(8),
+            pretty: true,
+            json: false,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
