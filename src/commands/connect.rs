@@ -43,6 +43,22 @@ pub async fn run(
 
             let channel = command.channel_id.to_channel(&ctx).await?.guild().unwrap();
 
+            let Some(parent) = channel.parent_id else {
+                return CmdError::UnsupportedChannelConnect
+                    .reply(&ctx, command)
+                    .await;
+            };
+
+            let parent = parent.to_channel(&ctx).await?;
+
+            if let Some(category) = parent.category() {
+                if category.id != config.active_channel && category.id != config.archive_channel {
+                    return CmdError::UnsupportedChannelConnect
+                        .reply(&ctx, command)
+                        .await;
+                }
+            }
+
             let db = create_db_instance(&config).await?;
 
             register_db(

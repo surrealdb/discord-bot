@@ -5,7 +5,7 @@ use serenity::{
     model::prelude::{application_command::CommandDataOption, *},
     prelude::*,
 };
-use surrealdb::opt::auth::{Database, Namespace, Root, Scope};
+use surrealdb::opt::auth::{Database, Namespace, Root};
 use tokio::time::Instant;
 
 use crate::{

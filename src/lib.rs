@@ -22,7 +22,7 @@ use serenity::{
     },
     prelude::Context,
 };
-use surrealdb::{opt::IntoQuery, sql::Value, Error, Response};
+use surrealdb::{opt::IntoQuery, sql, Error, Response};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 use utils::{ephemeral_interaction_edit, CmdError, ToInteraction, MAX_FILE_SIZE};
@@ -328,16 +328,16 @@ pub fn process(
     let num_statements = response.num_statements();
     // Prepare a single value from the query response
     let value = if num_statements > 1 {
-        let mut output = Vec::<Value>::with_capacity(num_statements);
+        let mut output = Vec::<sql::Value>::with_capacity(num_statements);
         for index in 0..num_statements {
-            output.push(match response.take(index) {
-                Ok(v) => v,
-                Err(e) => e.to_string().into(),
+            output.push(match response.take::<surrealdb::Value>(index) {
+                Ok(v) => v.into_inner(),
+                Err(e) => sql::Value::from(e.to_string()),
             });
         }
-        Value::from(output)
+        sql::Value::from(output)
     } else {
-        response.take(0)?
+        response.take::<surrealdb::Value>(0)?.into_inner()
     };
     // Check if we should emit JSON and/or prettify
     Ok(match (json, pretty) {

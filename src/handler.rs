@@ -88,7 +88,7 @@ impl EventHandler for Handler {
                 async {
                     trace!(command = ?command, "received command interaction");
                     let res = match command.data.name.as_str() {
-                        "auth" => commands::auth::run(&command, ctx.clone()).await,
+                        // "auth" => commands::auth::run(&command, ctx.clone()).await,
                         "create" => commands::create::run(&command, ctx.clone()).await,
                         "configure" => commands::configure::run(&command, ctx.clone()).await,
                         "share" => commands::share::run(&command, ctx.clone()).await,
