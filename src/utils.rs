@@ -55,6 +55,7 @@ pub enum CmdError {
     ExpectedAttachment,
     CreateDB(anyhow::Error),
     RegisterDB(anyhow::Error),
+    UnsupportedChannelConnect,
 }
 
 impl CmdError {
@@ -149,7 +150,11 @@ impl CmdError {
             CmdError::RegisterDB(e) => (
                 "Database registration failed".into(),
                 format!("There was an error while registering the database:\n```rust\n{e}\n```").into(),
-            )
+            ),
+            CmdError::UnsupportedChannelConnect => (
+                "Tried to connect on an unsupported channel".into(),
+                "Please use /create or switch to a thread or SurrealQL channel".into()
+            ),
         }
     }
 

@@ -1,4 +1,4 @@
-pub mod auth;
+// pub mod auth;
 pub mod clean;
 pub mod clean_all;
 pub mod config_update;
@@ -18,7 +18,7 @@ use serenity::builder::CreateApplicationCommands;
 
 pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateApplicationCommands {
     commands
-        .create_application_command(|command| auth::register(command))
+        // .create_application_command(|command| auth::register(command))
         .create_application_command(|command| create::register(command))
         .create_application_command(|command| configure::register(command))
         .create_application_command(|command| share::register(command))

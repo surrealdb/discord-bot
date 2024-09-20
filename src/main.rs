@@ -1,7 +1,7 @@
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use std::env;
 use std::path::Path;
 use surreal_bot::config::Config;
