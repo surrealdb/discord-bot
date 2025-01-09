@@ -31,15 +31,15 @@ use utils::{ephemeral_interaction_edit, CmdError, ToInteraction, MAX_FILE_SIZE};
 #[macro_use]
 extern crate tracing;
 
-use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::{cmp::Ordering, sync::LazyLock};
 
-use once_cell::sync::Lazy;
 use surrealdb::engine::local::Db;
 use surrealdb::Surreal;
 
-pub static DBCONNS: Lazy<Mutex<HashMap<u64, Conn>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-pub static DB: Lazy<Surreal<Db>> = Lazy::new(Surreal::init);
+pub static DBCONNS: LazyLock<Mutex<HashMap<u64, Conn>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+pub static DB: LazyLock<Surreal<Db>> = LazyLock::new(Surreal::init);
 
 pub const BIG_QUERY_SENT_KEY: &str = "Query sent";
 pub const BIG_QUERY_VARS_KEY: &str = "Variables sent";
