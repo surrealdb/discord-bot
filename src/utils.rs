@@ -56,6 +56,7 @@ pub enum CmdError {
     CreateDB(anyhow::Error),
     RegisterDB(anyhow::Error),
     UnsupportedChannelConnect,
+    Stats(String),
 }
 
 impl CmdError {
@@ -155,6 +156,7 @@ impl CmdError {
                 "Tried to connect on an unsupported channel".into(),
                 "Please use /create or switch to a thread or SurrealQL channel".into()
             ),
+            CmdError::Stats(e) => ("Statistics generation failed".into(), format!("Got error: \n{e}").into()),
         }
     }
 

@@ -5,6 +5,7 @@ pub mod config;
 pub mod db_utils;
 pub mod handler;
 pub mod premade;
+pub mod stats;
 pub mod utils;
 
 use futures::StreamExt;

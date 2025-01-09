@@ -13,6 +13,7 @@ pub mod q;
 pub mod query;
 pub mod reconnect;
 pub mod share;
+pub mod stats;
 
 use serenity::builder::CreateApplicationCommands;
 
@@ -33,4 +34,5 @@ pub fn register_all(commands: &mut CreateApplicationCommands) -> &mut CreateAppl
         .create_application_command(|command| reconnect::register(command))
         .create_application_command(|command| connect::register(command))
         .create_application_command(|command| export::register(command))
+        .create_application_command(|command| stats::register(command))
 }

@@ -9,7 +9,7 @@ authors = [
 
 [dependencies]
 anyhow = "1.0.89"
-cargo-lock = "9.0.0"
+cargo-lock = "10.0.1"
 async-channel = "2.3.1"
 dotenvy = "0.15.7"
 humantime = "2.1.0"
@@ -22,6 +22,7 @@ serenity = { default-features = false, features = [
     "gateway",
     "model",
     "rustls_backend",
+    "unstable_discord_api",
 ], version = "0.11.6" }
 surrealdb = { version = "2.0.1", features = ["kv-mem", "kv-rocksdb"] }
 tokio = { version = "1.40.0", features = [
@@ -33,3 +34,5 @@ tracing = "0.1"
 tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3.28"
+time = { version = "0.3.37", features = ["local-offset"] }
+google-sheets4 = "6.0.0"
