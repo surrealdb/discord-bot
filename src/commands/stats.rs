@@ -17,7 +17,7 @@ pub async fn run(
         command.channel_id,
         ctx.http.get_channel(command.channel_id.0).await?
     );
-    match collect_stats(&ctx.http).await {
+    match collect_stats(ctx.http.clone()).await {
         Ok(s) => {
             info!("got stats: {s:?}");
             ephemeral_interaction(
