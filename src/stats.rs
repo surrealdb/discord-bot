@@ -15,7 +15,8 @@ use serenity::{
     },
     utils::Guild,
 };
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::OffsetDateTime;
+use tokio::time::Instant;
 
 #[derive(Debug)]
 pub struct Stats {
@@ -51,9 +52,13 @@ pub fn start(http: Arc<Http>) {
     tokio::spawn(async move {
         loop {
             chron_midnight().await;
+            let start = Instant::now();
             match collect_stats(http.clone()).await {
                 Ok(s) => match s.upload().await {
-                    Ok(_) => info!("successfully uploaded stats: {s:?}"),
+                    Ok(_) => info!(
+                        "successfully uploaded stats in {:?}: {s:?}",
+                        Instant::now() - start
+                    ),
                     Err(e) => error!("error uploading stats: {e}"),
                 },
                 Err(e) => error!("error generating stats: {e}"),
@@ -136,8 +141,6 @@ pub async fn collect_stats(http: Arc<Http>) -> Result<Stats, anyhow::Error> {
         .into_iter()
         .next()
         .ok_or(anyhow::Error::msg("not part of any guild"))?;
-
-    info!("got guild: {guild:?}");
 
     let mut total_members = 0;
     let mut new_members_7days = 0;
