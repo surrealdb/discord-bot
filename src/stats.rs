@@ -72,7 +72,7 @@ impl std::ops::Add for MessageStats {
 pub fn start(http: Arc<Http>) {
     tokio::spawn(async move {
         loop {
-            // chron_midnight().await;
+            chron_midnight().await;
             let start = Instant::now();
             match collect_stats(http.clone()).await {
                 Ok(s) => match s.upload().await {
