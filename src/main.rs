@@ -10,7 +10,7 @@ use tracing::{error, info};
 use surrealdb::engine::local::{Mem, RocksDb};
 
 use surreal_bot::handler::Handler;
-use surreal_bot::DB;
+use surreal_bot::{stats, DB};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -56,6 +56,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let shard_manager = client.shard_manager.clone();
     let http = client.cache_and_http.http.clone();
+    stats::start(http.clone());
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await

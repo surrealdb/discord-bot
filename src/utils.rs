@@ -1,4 +1,3 @@
-use once_cell::sync::Lazy;
 use serenity::{
     builder::{CreateInteractionResponse, EditInteractionResponse},
     http::Http,
@@ -20,7 +19,11 @@ use serenity::{
     },
     prelude::Context,
 };
-use std::{borrow::Cow, cmp::Ordering, sync::Arc};
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    sync::{Arc, LazyLock},
+};
 use surrealdb::{
     engine::local::{Db, Mem},
     Surreal,
@@ -56,6 +59,7 @@ pub enum CmdError {
     CreateDB(anyhow::Error),
     RegisterDB(anyhow::Error),
     UnsupportedChannelConnect,
+    Stats(String),
 }
 
 impl CmdError {
@@ -155,6 +159,7 @@ impl CmdError {
                 "Tried to connect on an unsupported channel".into(),
                 "Please use /create or switch to a thread or SurrealQL channel".into()
             ),
+            CmdError::Stats(e) => ("Statistics generation failed".into(), format!("Got error: \n{e}").into()),
         }
     }
 
@@ -630,7 +635,7 @@ pub async fn create_db_instance(server_config: &Config) -> Result<Surreal<Db>, a
 
 static LOCK_FILE: &str = include_str!("../Cargo.lock");
 
-pub static SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
+pub static SURREALDB_VERSION: LazyLock<String> = LazyLock::new(|| {
     let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
     let package = lock
         .packages
@@ -646,7 +651,7 @@ pub static SURREALDB_VERSION: Lazy<String> = Lazy::new(|| {
     }
 });
 
-pub static BOT_VERSION: Lazy<String> = Lazy::new(|| {
+pub static BOT_VERSION: LazyLock<String> = LazyLock::new(|| {
     let lock: cargo_lock::Lockfile = LOCK_FILE.parse().expect("Failed to parse Cargo.lock");
     let package = lock
         .packages

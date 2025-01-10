@@ -105,6 +105,7 @@ impl EventHandler for Handler {
                         "reconnect" => commands::reconnect::run(&command, ctx.clone()).await,
                         "connect" => commands::connect::run(&command, ctx.clone()).await,
                         "export" => commands::export::run(&command, ctx.clone()).await,
+                        "stats" => commands::stats::run(&command, ctx.clone()).await,
                         _ => {
                             warn!(command_name = %command.data.name, command_options = ?command.data.options, "unknown command received");
                             ephemeral_interaction(&ctx, &command, "Unknown command", "Command is currently not implemented", Some(false)).await
