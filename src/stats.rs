@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, env, ops::Deref, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    ops::Deref,
+    sync::Arc,
+};
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use google_sheets4::{
@@ -27,23 +32,39 @@ pub struct Stats {
     new_messages_7days: u64,
     new_team_messages_7days: u64,
     new_ambassador_messages_7days: u64,
+    team_stats: BTreeMap<String, u64>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct MessageStats {
     new_7days: u64,
     new_team_7days: u64,
     new_ambassador_7days: u64,
+    team_stats: BTreeMap<UserId, u64>,
+}
+impl MessageStats {
+    fn new(team_members: impl Deref<Target = [UserId]>) -> Self {
+        Self {
+            new_7days: 0,
+            new_team_7days: 0,
+            new_ambassador_7days: 0,
+            team_stats: team_members.iter().map(|uid| (*uid, 0)).collect(),
+        }
+    }
 }
 
 impl std::ops::Add for MessageStats {
     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self::Output {
+    fn add(mut self, rhs: Self) -> Self::Output {
+        for (k, v) in self.team_stats.iter_mut() {
+            *v += rhs.team_stats.get(k).unwrap()
+        }
         Self {
             new_7days: self.new_7days + rhs.new_7days,
             new_team_7days: self.new_team_7days + rhs.new_team_7days,
             new_ambassador_7days: self.new_ambassador_7days + rhs.new_ambassador_7days,
+            team_stats: self.team_stats,
         }
     }
 }
@@ -51,7 +72,7 @@ impl std::ops::Add for MessageStats {
 pub fn start(http: Arc<Http>) {
     tokio::spawn(async move {
         loop {
-            chron_midnight().await;
+            // chron_midnight().await;
             let start = Instant::now();
             match collect_stats(http.clone()).await {
                 Ok(s) => match s.upload().await {
@@ -110,6 +131,7 @@ impl Stats {
 
         let hub = Sheets::new(client2, auth);
 
+        // Main Discord sheet
         let res = hub
             .spreadsheets()
             .values_get(&sheet_id, "Discord!A:A")
@@ -124,6 +146,76 @@ impl Stats {
                 serde_json::from_value(json!({"values": [[OffsetDateTime::now_utc().date().to_string(), self.total_members, self.new_members_7days, self.new_members_30days, self.new_forum_posts_7days, self.new_messages_7days, self.new_team_messages_7days, self.new_ambassador_messages_7days]]}))?,
                 &sheet_id,
                 &format!("Discord!A{}:H{}", lines_filled + 1, lines_filled + 1),
+            )
+            .value_input_option("USER_ENTERED")
+            .doit()
+            .await?;
+
+        // Team stats
+
+        let mut team_stats = self.team_stats.clone();
+        let mut row_acc = vec![json!(OffsetDateTime::now_utc().date().to_string())];
+
+        let lines_filled = {
+            let res = hub
+                .spreadsheets()
+                .values_get(&sheet_id, "DiscordTeamStats!A:A")
+                .doit()
+                .await?;
+
+            res.1.values.unwrap().len()
+        };
+
+        let res = hub
+            .spreadsheets()
+            .values_get(&sheet_id, "DiscordTeamStats!B1:1")
+            .doit()
+            .await?
+            .1
+            .values
+            .map(|r| r.into_iter().next())
+            .flatten()
+            .into_iter()
+            .flatten();
+
+        let mut sheet_names: Vec<_> = res
+            .map(|v| match v {
+                serde_json::Value::String(s) => s,
+                v => v.to_string(),
+            })
+            .collect();
+
+        for name in &sheet_names {
+            if let Some(msg_count) = team_stats.remove(name.as_str()) {
+                row_acc.push(json!(msg_count));
+            }
+        }
+        for (name, count) in team_stats {
+            row_acc.push(json!(count));
+            sheet_names.push(name);
+        }
+
+        let _res = hub
+            .spreadsheets()
+            .values_update(
+                serde_json::from_value(json!({"values": [row_acc]}))?,
+                &sheet_id,
+                &format!(
+                    "DiscordTeamStats!A{}:{}",
+                    lines_filled + 1,
+                    lines_filled + 1
+                ),
+            )
+            .value_input_option("USER_ENTERED")
+            .doit()
+            .await?;
+
+        let _res = hub
+            .spreadsheets()
+            .values_update(
+                serde_json::from_value(json!({"values": [sheet_names]}))?,
+                &sheet_id,
+                "DiscordTeamStats!B1:1",
             )
             .value_input_option("USER_ENTERED")
             .doit()
@@ -244,11 +336,28 @@ pub async fn collect_stats(http: Arc<Http>) -> Result<Stats, anyhow::Error> {
         })
         .collect();
 
-    let mut msg_stats = MessageStats::default();
+    let mut msg_stats = MessageStats::new(team_members);
 
     while let Some(ms) = channel_tasks.next().await {
         msg_stats = msg_stats + ms?;
     }
+
+    let mut team_stats = BTreeMap::new();
+
+    for (k, v) in msg_stats.team_stats {
+        let user = guild
+            .id
+            .member(&http, k)
+            .await
+            .map_or(k.0.to_string(), |m| {
+                m.nick
+                    .map(|n| n.trim_end_matches(" at SurrealDB").to_string())
+                    .unwrap_or(m.user.name)
+            });
+        team_stats.insert(user, v);
+    }
+
+    assert_eq!(msg_stats.new_team_7days, team_stats.values().sum::<u64>());
 
     Ok(Stats {
         total_members,
@@ -258,6 +367,7 @@ pub async fn collect_stats(http: Arc<Http>) -> Result<Stats, anyhow::Error> {
         new_messages_7days: msg_stats.new_7days,
         new_team_messages_7days: msg_stats.new_team_7days,
         new_ambassador_messages_7days: msg_stats.new_ambassador_7days,
+        team_stats,
     })
 }
 
@@ -267,16 +377,17 @@ async fn collect_channel_message_stats(
     team_members: impl Deref<Target = [UserId]>,
     ambassador_members: impl Deref<Target = [UserId]>,
 ) -> MessageStats {
-    let mut acc = MessageStats::default();
+    let mut acc = MessageStats::new(team_members);
     let now = OffsetDateTime::now_utc();
 
-    let mut message_stream = channel_id.messages_iter(http).boxed();
+    let mut message_stream = channel_id.messages_iter(&http).boxed();
 
     while let Some(msg) = message_stream.next().await {
         let msg = match msg {
             Ok(m) => m,
             Err(e) => {
-                info!(?e, "Error accessing message, skipping channel");
+                let chan = http.get_channel(channel_id.0).await.ok();
+                info!(?e, ?chan, "Error accessing message, skipping channel");
                 return acc;
             }
         };
@@ -285,7 +396,8 @@ async fn collect_channel_message_stats(
         }
         acc.new_7days += 1;
 
-        if team_members.contains(&msg.author.id) {
+        if let Some(val) = acc.team_stats.get_mut(&msg.author.id) {
+            *val += 1;
             acc.new_team_7days += 1;
         }
         if ambassador_members.contains(&msg.author.id) {
